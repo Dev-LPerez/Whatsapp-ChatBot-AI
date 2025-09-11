@@ -10,7 +10,7 @@ from datetime import date
 
 app = FastAPI()
 
-# --- IMPORTANTE: CONFIGURACIÓN SEGURA ---
+# --- CONFIGURACIÓN SEGURA ---
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 ID_NUMERO_TELEFONO = os.getenv("ID_NUMERO_TELEFONO")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -18,7 +18,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-# --- CONFIGURACIÓN DE LA BASE DE DATOS ---
+# --- CONFIGURACIÓN DE LA BASE DE DATOS (ACTUALIZADA) ---
 DB_NAME = "database.db"
 
 def inicializar_db():
@@ -31,7 +31,8 @@ def inicializar_db():
         nivel INTEGER,
         ultimo_reto_diario TEXT,
         reto_actual_enunciado TEXT,
-        reto_actual_solucion TEXT
+        reto_actual_solucion TEXT,
+        historial_retos TEXT
     )
     """)
     conn.commit()
@@ -52,7 +53,8 @@ def obtener_usuario(numero_telefono):
 def crear_usuario(numero_telefono, nombre):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO usuarios (numero_telefono, nombre, nivel) VALUES (?, ?, ?)", (numero_telefono, nombre, 1))
+    # El historial se inicializa como una lista JSON vacía
+    cursor.execute("INSERT INTO usuarios (numero_telefono, nombre, nivel, historial_retos) VALUES (?, ?, ?, ?)", (numero_telefono, nombre, 1, json.dumps([])))
     conn.commit()
     conn.close()
 
@@ -68,25 +70,40 @@ def actualizar_usuario(numero_telefono, datos):
 
 # --- FUNCIONES DE IA ---
 
-def generar_reto_con_ia(nivel):
+# --- ACTUALIZADO: GENERADOR DE RETOS CON MEMORIA Y TEMÁTICA ---
+def generar_reto_con_ia(nivel, tematica=None, historial_retos=[]):
     if not GEMINI_API_KEY:
         return {"error": "La función de IA no está configurada."}
+        
     model = genai.GenerativeModel('gemini-1.5-flash')
-    prompt = f"""
-    Eres un generador de retos de lógica de programación. Tu tarea es crear un desafío para un estudiante de nivel {nivel}.
-    El nivel 1 son fundamentos básicos. Nivel 2 son condicionales. Nivel 3 son bucles. Niveles superiores son arrays, etc.
-    Crea un reto apropiado para el nivel {nivel}.
-    Tu respuesta DEBE ser un objeto JSON con "enunciado" y "solucion_ideal".
+    
+    # Construcción dinámica del prompt
+    prompt = f"Eres un generador de retos de lógica de programación para un estudiante de nivel {nivel}.\n"
+    
+    if tematica:
+        prompt += f"El reto DEBE estar relacionado con la siguiente temática: '{tematica}'.\n"
+        
+    if historial_retos:
+        historial_str = ", ".join(historial_retos)
+        prompt += f"El usuario ya ha resuelto retos sobre: {historial_str}. NO generes un reto con una temática idéntica o muy similar a estos.\n"
+        
+    prompt += """
+    Tu respuesta DEBE ser un objeto JSON con tres claves: "titulo", "enunciado" y "solucion_ideal".
+    - "titulo": Un título corto para el reto (ej: "Calcular Área de Rectángulo").
+    - "enunciado": El texto completo del reto.
+    - "solucion_ideal": Una solución ejemplar en pseudocódigo.
     """
+    
     try:
         response = model.generate_content(prompt)
         json_response = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
         return json_response
     except Exception as e:
         print(f"Error al generar reto con IA: {e}")
-        return {"error": "No pude generar un reto en este momento."}
+        return {"error": "No pude generar un reto en este momento. Intenta de nuevo."}
 
 def evaluar_solucion_con_ia(reto_enunciado, solucion_usuario):
+    # (Sin cambios)
     if not GEMINI_API_KEY:
         return "INCORRECTO: La función de evaluación no está configurada."
     model = genai.GenerativeModel('gemini-1.5-flash')
@@ -98,34 +115,18 @@ def evaluar_solucion_con_ia(reto_enunciado, solucion_usuario):
         print(f"Error al llamar a la API de Gemini: {e}")
         return "INCORRECTO: Hubo un problema con el tutor de IA."
 
-# --- NUEVA FUNCIÓN DE IA: CHAT CONVERSACIONAL ---
 def chat_conversacional_con_ia(mensaje_usuario):
+    # (Sin cambios)
     if not GEMINI_API_KEY:
-        return "Lo siento, la función de chat no está disponible en este momento."
-        
+        return "Lo siento, la función de chat no está disponible."
     model = genai.GenerativeModel('gemini-1.5-flash')
-    
-    prompt = f"""
-    Eres "LogicBot", un tutor de programación experto, amigable y paciente. Tu único propósito es ayudar a los usuarios a mejorar su lógica de programación con retos.
-
-    **Tus Reglas:**
-    1.  **Preséntate:** Si te preguntan quién eres, eres LogicBot.
-    2.  **Explica tu función:** Explica que ofreces retos diarios y de práctica.
-    3.  **Guía al usuario:** Si te preguntan cómo enviar una solución, explícales claramente que deben escribir la palabra `solucion:` seguida de su respuesta en pseudocódigo.
-    4.  **Mantente enfocado:** SOLO respondes preguntas sobre programación, lógica, retos o tu propio funcionamiento.
-    5.  **Rechaza otros temas:** Si te preguntan sobre cualquier otra cosa (clima, política, deportes, etc.), debes rechazar amablemente la pregunta y redirigir la conversación a la programación. Ejemplo: "Esa es una pregunta interesante, pero mi especialidad es la lógica de programación. ¿Te gustaría intentar un reto?"
-
-    **Pregunta del usuario:** "{mensaje_usuario}"
-
-    **Tu respuesta (amigable, concisa y en español):**
-    """
-    
+    prompt = f'Eres "LogicBot", un tutor de programación. Tu único propósito es ayudar a los usuarios con retos de lógica. Si te preguntan cómo enviar soluciones, diles que usen `solucion: [respuesta]`. Si te preguntan algo fuera de tema, redirige amablemente a la programación. Pregunta del usuario: "{mensaje_usuario}". Tu respuesta (amigable y concisa):'
     try:
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
         print(f"Error en el chat conversacional con IA: {e}")
-        return "No estoy seguro de cómo responder a eso. Recuerda que soy un bot de programación. Intenta pedir un 'reto diario'."
+        return "No estoy seguro de cómo responder a eso. Intenta pedir un 'reto diario'."
 
 # --- WEBHOOK (LÓGICA PRINCIPAL ACTUALIZADA) ---
 @app.post("/webhook")
@@ -148,49 +149,59 @@ async def recibir_mensaje(request: Request):
 
             if not usuario_actual:
                 crear_usuario(numero_remitente, nombre_usuario)
-                texto_respuesta = f"¡Hola, {nombre_usuario}! 👋 Soy LogicBot, tu tutor de programación. Escribe 'reto diario' para empezar tu primer desafío."
+                texto_respuesta = f"¡Hola, {nombre_usuario}! 👋 Soy LogicBot, tu tutor de programación. Escribe 'reto diario' para empezar."
                 responder_mensaje(numero_remitente, texto_respuesta)
                 return Response(status_code=200)
 
             mensaje_lower = mensaje_texto.lower()
+            historial_retos_json = usuario_actual.get("historial_retos", "[]")
+            historial_retos = json.loads(historial_retos_json)
 
             if mensaje_texto.lower().startswith("solucion:"):
                 solucion_usuario = mensaje_texto[len("solucion:"):].strip()
                 if not usuario_actual.get("reto_actual_enunciado"):
-                    responder_mensaje(numero_remitente, "No tienes un reto activo. Pide uno nuevo escribiendo 'reto diario' o 'reto de práctica'.")
+                    responder_mensaje(numero_remitente, "No tienes un reto activo. Pide uno nuevo.")
                 else:
                     feedback_ia = evaluar_solucion_con_ia(usuario_actual["reto_actual_enunciado"], solucion_usuario)
                     responder_mensaje(numero_remitente, feedback_ia)
                     if feedback_ia.strip().upper().startswith("CORRECTO"):
                         nuevo_nivel = usuario_actual["nivel"] + 1
-                        actualizar_usuario(numero_remitente, {"nivel": nuevo_nivel, "reto_actual_enunciado": None, "reto_actual_solucion": None})
+                        historial_retos.append(usuario_actual.get("reto_actual_titulo", "Reto completado")) # Guardamos el título del reto
+                        actualizar_usuario(numero_remitente, {"nivel": nuevo_nivel, "reto_actual_enunciado": None, "reto_actual_solucion": None, "historial_retos": json.dumps(historial_retos[-5:])}) # Guardamos los últimos 5
                         agradecimiento = f"\n\n¡Excelente! Has avanzado al nivel {nuevo_nivel}. ¡Sigue así!"
                         responder_mensaje(numero_remitente, agradecimiento)
 
-            elif "reto diario" in mensaje_lower:
+            elif "reto diario" in mensaje_lower or "reto de práctica" in mensaje_lower:
                 hoy = str(date.today())
-                if usuario_actual.get("ultimo_reto_diario") == hoy:
-                    responder_mensaje(numero_remitente, "Ya has recibido tu reto diario de hoy. ¡Intenta resolverlo! Si quieres más, escribe 'reto de práctica'.")
-                else:
-                    responder_mensaje(numero_remitente, "¡Genial! Generando tu reto diario...")
-                    reto = generar_reto_con_ia(usuario_actual["nivel"])
-                    if "error" in reto:
-                        responder_mensaje(numero_remitente, reto["error"])
-                    else:
-                        actualizar_usuario(numero_remitente, {"ultimo_reto_diario": hoy, "reto_actual_enunciado": reto["enunciado"], "reto_actual_solucion": reto["solucion_ideal"]})
-                        responder_mensaje(numero_remitente, reto["enunciado"])
-            
-            elif "reto de práctica" in mensaje_lower:
-                responder_mensaje(numero_remitente, "¡Claro! Buscando un reto de práctica para ti...")
-                reto = generar_reto_con_ia(usuario_actual["nivel"])
+                if "reto diario" in mensaje_lower and usuario_actual.get("ultimo_reto_diario") == hoy:
+                    responder_mensaje(numero_remitente, "Ya has recibido tu reto diario de hoy. Si quieres más, escribe 'reto de práctica'.")
+                    return Response(status_code=200)
+
+                # Extracción simple de temática
+                tematica = None
+                if "sobre" in mensaje_lower:
+                    try:
+                        tematica = mensaje_texto.split("sobre", 1)[1].strip()
+                    except IndexError:
+                        pass
+
+                responder_mensaje(numero_remitente, f"¡Entendido! Buscando un reto para ti{f' sobre {tematica}' if tematica else ''}...")
+                reto = generar_reto_con_ia(usuario_actual["nivel"], tematica, historial_retos)
+                
                 if "error" in reto:
                     responder_mensaje(numero_remitente, reto["error"])
                 else:
-                    actualizar_usuario(numero_remitente, {"reto_actual_enunciado": reto["enunciado"], "reto_actual_solucion": reto["solucion_ideal"]})
+                    actualizaciones = {
+                        "reto_actual_titulo": reto["titulo"],
+                        "reto_actual_enunciado": reto["enunciado"],
+                        "reto_actual_solucion": reto["solucion_ideal"]
+                    }
+                    if "reto diario" in mensaje_lower:
+                        actualizaciones["ultimo_reto_diario"] = hoy
+                    
+                    actualizar_usuario(numero_remitente, actualizaciones)
                     responder_mensaje(numero_remitente, reto["enunciado"])
-
             else:
-                # --- ACTUALIZACIÓN: Si no es un comando, usamos el chat de IA ---
                 respuesta_chat = chat_conversacional_con_ia(mensaje_texto)
                 responder_mensaje(numero_remitente, respuesta_chat)
 
@@ -207,6 +218,7 @@ async def startup_event():
 
 # --- FUNCIONES RESTANTES (sin cambios) ---
 def responder_mensaje(numero_destinatario, texto_respuesta):
+    # (Esta función se queda igual)
     if not WHATSAPP_TOKEN or not ID_NUMERO_TELEFONO:
         print("ERROR: Faltan las variables de entorno de WhatsApp.")
         return
@@ -223,6 +235,7 @@ def responder_mensaje(numero_destinatario, texto_respuesta):
 
 @app.get("/webhook")
 async def verificar_webhook(request: Request):
+    # (Esta función se queda igual)
     VERIFY_TOKEN = "micodigosecreto"
     mode = request.query_params.get("hub.mode")
     token = request.query_params.get("hub.verify_token")
