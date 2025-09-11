@@ -1,5 +1,6 @@
 # main.py
 
+import os
 import json
 import requests
 import sqlite3
@@ -8,20 +9,23 @@ from fastapi import FastAPI, Request, Response
 
 app = FastAPI()
 
-# --- IMPORTANTE: CONFIGURACIÓN ---
-WHATSAPP_TOKEN = "EAATGDUciZACABPfb6PzXTedNr53cTioUjfrZCyTl27kDHkVkd7GhjnjJnjh7CwXv0e2528EgjthaMWoJTgz9fLp52lZCPUHLB1s1xmm5TDZBQXZA0HLuOaZBUq6qLM6uA8ZCgdSxXD6qI6wAutpo8QfSGaDBp2EL3yE6t1treEDVJRiWW0uB10RKe3N6jO8OBbBAi37reKhqPzS2AaHumbLV2E8qD09bZCRAevEtBpucqRcZD"
-ID_NUMERO_TELEFONO = "843900795475100"
-GEMINI_API_KEY = "AIzaSyAtSPegfvfpGNG1BInkGZ7fWJtTRVJoMlM"
+# --- IMPORTANTE: CONFIGURACIÓN SEGURA ---
+# El código busca estas variables en el entorno que provee Render.
+# ¡Nunca escribas tus llaves secretas directamente en el código!
+WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
+ID_NUMERO_TELEFONO = os.getenv("ID_NUMERO_TELEFONO")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-genai.configure(api_key=GEMINI_API_KEY)
+# Se configura la IA solo si la API Key está presente
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
-# --- NUEVO: CONFIGURACIÓN DE LA BASE DE DATOS ---
+# --- CONFIGURACIÓN DE LA BASE DE DATOS ---
 DB_NAME = "database.db"
 
 def inicializar_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    # Creamos la tabla 'usuarios' si no existe
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS usuarios (
         numero_telefono TEXT PRIMARY KEY,
@@ -32,7 +36,7 @@ def inicializar_db():
     conn.commit()
     conn.close()
 
-# --- BANCO DE RETOS (sin cambios) ---
+# --- BANCO DE RETOS ---
 banco_de_retos = {
     1: {
         "id": "L1-001",
@@ -42,8 +46,7 @@ banco_de_retos = {
             "**Reto #1: Sumar dos números.**\n"
             "Describe en pseudocódigo los pasos para pedirle al usuario dos números, sumarlos y mostrar el resultado.\n\n"
             "Para enviar tu respuesta, escribe `solucion:` seguido de tu pseudocódigo."
-        ),
-        "solucion_ideal": "INICIO, PEDIR numero1, PEDIR numero2, resultado = numero1 + numero2, MOSTRAR resultado, FIN"
+        )
     },
     2: {
         "id": "L2-001",
@@ -53,27 +56,24 @@ banco_de_retos = {
             "**Reto #2: Número Par o Impar.**\n"
             "Describe en pseudocódigo la lógica para determinar si un número es par o impar.\n\n"
             "Para enviar tu respuesta, escribe `solucion:` seguido de tu pseudocódigo."
-        ),
-        "solucion_ideal": "INICIO, PEDIR numero, SI (numero % 2 == 0) ENTONCES MOSTRAR 'Par' SINO MOSTRAR 'Impar', FIN"
+        )
     }
 }
 
-# --- NUEVO: FUNCIONES PARA INTERACTUAR CON LA DB ---
+# --- FUNCIONES PARA INTERACTUAR CON LA DB ---
 def obtener_usuario(numero_telefono):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("SELECT nombre, nivel FROM usuarios WHERE numero_telefono = ?", (numero_telefono,))
-    usuario = cursor.fetchone() # fetchone() devuelve una tupla (nombre, nivel) o None
+    usuario = cursor.fetchone()
     conn.close()
     if usuario:
-        # Devolvemos un diccionario para que sea fácil de usar
         return {"nombre": usuario[0], "nivel": usuario[1]}
     return None
 
 def crear_usuario(numero_telefono, nombre):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    # Todos los usuarios nuevos empiezan en el nivel 1
     cursor.execute("INSERT INTO usuarios (numero_telefono, nombre, nivel) VALUES (?, ?, ?)", (numero_telefono, nombre, 1))
     conn.commit()
     conn.close()
@@ -85,8 +85,30 @@ def actualizar_nivel_usuario(numero_telefono, nuevo_nivel):
     conn.commit()
     conn.close()
 
+# --- FUNCIÓN: EVALUACIÓN CON IA ---
+def evaluar_solucion_con_ia(reto_enunciado, solucion_usuario):
+    if not GEMINI_API_KEY:
+        return "INCORRECTO: La función de evaluación con IA no está configurada."
+        
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    prompt = f"""
+    Eres un tutor de programación experto y amigable. Tu tarea es evaluar la solución de pseudocódigo de un estudiante.
+    - **Tarea del estudiante:** "{reto_enunciado}"
+    - **Solución del estudiante:** "{solucion_usuario}"
 
-# --- WEBHOOK (actualizado para usar la DB) ---
+    Evalúa la solución del estudiante. Responde en español y de forma concisa.
+    Tu respuesta DEBE empezar con "CORRECTO:" si la lógica es correcta, o "INCORRECTO:" si la lógica es incorrecta.
+    Después, en no más de dos frases, dale un feedback útil y amigable.
+    Si es incorrecto, dale una pista clave, pero no la solución completa.
+    """
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        print(f"Error al llamar a la API de Gemini: {e}")
+        return "INCORRECTO: Hubo un problema al contactar al tutor de IA. Intenta de nuevo."
+
+# --- WEBHOOK ---
 @app.post("/webhook")
 async def recibir_mensaje(request: Request):
     body = await request.json()
@@ -103,7 +125,6 @@ async def recibir_mensaje(request: Request):
             mensaje_texto = value['messages'][0]['text']['body']
             nombre_usuario = value['contacts'][0]['profile']['name']
 
-            # Buscamos al usuario en la base de datos
             usuario_actual = obtener_usuario(numero_remitente)
 
             if not usuario_actual:
@@ -112,14 +133,16 @@ async def recibir_mensaje(request: Request):
                 responder_mensaje(numero_remitente, texto_respuesta)
                 return Response(status_code=200)
 
-            # Lógica de comandos
             nivel_actual = usuario_actual["nivel"]
             mensaje_lower = mensaje_texto.lower()
 
             if mensaje_texto.lower().startswith("solucion:"):
                 solucion_usuario = mensaje_texto[len("solucion:"):].strip()
+                if not solucion_usuario:
+                    responder_mensaje(numero_remitente, "Debes escribir tu solución después de 'solucion:'.")
+                    return Response(status_code=200)
+
                 reto_actual_enunciado = banco_de_retos[nivel_actual]["enunciado"]
-                
                 feedback_ia = evaluar_solucion_con_ia(reto_actual_enunciado, solucion_usuario)
                 responder_mensaje(numero_remitente, feedback_ia)
 
@@ -145,41 +168,31 @@ async def recibir_mensaje(request: Request):
 
     return Response(status_code=200)
 
-
 # --- Se ejecuta una sola vez al iniciar el servidor ---
 @app.on_event("startup")
 async def startup_event():
     inicializar_db()
 
-# --- El resto del código (evaluar_solucion_con_ia, responder_mensaje, verificar_webhook) se queda igual ---
-
-def evaluar_solucion_con_ia(reto_enunciado, solucion_usuario):
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    prompt = f"""
-    Eres un tutor de programación experto y amigable. Tu tarea es evaluar la solución de pseudocódigo de un estudiante.
-    - **Tarea del estudiante:** "{reto_enunciado}"
-    - **Solución del estudiante:** "{solucion_usuario}"
-
-    Evalúa la solución del estudiante. Responde en español y de forma concisa.
-    Tu respuesta DEBE empezar con "CORRECTO:" si la lógica es correcta, o "INCORRECTO:" si la lógica es incorrecta.
-    Después, en no más de dos frases, dale un feedback útil y amigable.
-    Si es incorrecto, dale una pista clave, pero no la solución completa.
-    """
-    try:
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        print(f"Error al llamar a la API de Gemini: {e}")
-        return "INCORRECTO: Hubo un problema al contactar al tutor de IA. Intenta de nuevo."
-
+# --- FUNCIÓN PARA ENVIAR MENSAJES ---
 def responder_mensaje(numero_destinatario, texto_respuesta):
+    if not WHATSAPP_TOKEN or not ID_NUMERO_TELEFONO:
+        print("ERROR: Faltan las variables de entorno de WhatsApp.")
+        return
+
     url = f"https://graph.facebook.com/v19.0/{ID_NUMERO_TELEFONO}/messages"
     headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
     data = {"messaging_product": "whatsapp", "to": numero_destinatario, "text": {"body": texto_respuesta}}
-    response = requests.post(url, headers=headers, json=data)
-    print(f"Respuesta de la API de Meta: {response.status_code}")
-    print(response.json())
+    
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        response.raise_for_status() # Lanza un error si la respuesta es 4xx o 5xx
+        print(f"Respuesta de la API de Meta: {response.status_code}")
+        print(response.json())
+    except requests.exceptions.RequestException as e:
+        print(f"Error al enviar mensaje: {e}")
 
+
+# --- RUTA DE VERIFICACIÓN ---
 @app.get("/webhook")
 async def verificar_webhook(request: Request):
     VERIFY_TOKEN = "micodigosecreto"
@@ -187,5 +200,6 @@ async def verificar_webhook(request: Request):
     token = request.query_params.get("hub.verify_token")
     challenge = request.query_params.get("hub.challenge")
     if mode and token and mode == "subscribe" and token == VERIFY_TOKEN:
+        print("WEBHOOK_VERIFIED")
         return Response(content=challenge, status_code=200)
     return Response(status_code=403)
