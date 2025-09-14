@@ -20,6 +20,7 @@ def inicializar_db():
         ultima_conexion TEXT,
         estado_conversacion TEXT,
         tematica_actual TEXT,
+        tipo_reto_actual TEXT, -- <-- COLUMNA AÑADIDA
         reto_actual_enunciado TEXT,
         reto_actual_solucion TEXT,
         reto_actual_tipo TEXT,
