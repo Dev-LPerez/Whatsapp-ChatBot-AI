@@ -4,7 +4,8 @@ import sqlite3
 import json
 from datetime import date
 
-DB_NAME = "logicbot_final.db"
+# Cambiado a v3 para forzar la actualización del esquema en Render
+DB_NAME = "logicbot_v3.db" 
 
 def inicializar_db():
     """Crea la tabla de usuarios si no existe."""
@@ -19,8 +20,14 @@ def inicializar_db():
         racha_dias INTEGER DEFAULT 0,
         ultima_conexion TEXT,
         estado_conversacion TEXT,
+        
+        -- Columnas para el progreso del curso
+        curso_actual TEXT,
+        leccion_actual INTEGER DEFAULT 0,
+
+        -- Columnas para los retos
         tematica_actual TEXT,
-        tipo_reto_actual TEXT, -- <-- COLUMNA AÑADIDA
+        tipo_reto_actual TEXT,
         reto_actual_enunciado TEXT,
         reto_actual_solucion TEXT,
         reto_actual_tipo TEXT,
