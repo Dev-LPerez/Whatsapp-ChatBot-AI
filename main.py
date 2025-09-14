@@ -41,7 +41,7 @@ def inicializar_db():
     conn.commit()
     conn.close()
 
-# --- FUNCIONES DE BASE DE DATOS ---
+# --- FUNCIONES DE BASE DE DATOS (sin cambios) ---
 def obtener_usuario(numero_telefono):
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
@@ -71,7 +71,8 @@ def actualizar_usuario(numero_telefono, datos):
     conn.commit()
     conn.close()
 
-# --- FUNCIONES DE IA (sin cambios en esta corrección) ---
+# --- FUNCIONES DE IA (sin cambios) ---
+# ... (Las funciones generar_reto_con_ia, evaluar_solucion_con_ia, y chat_conversacional_con_ia se mantienen igual)
 def generar_reto_con_ia(nivel, tipo_reto, historial_retos=[]):
     if not GEMINI_API_KEY:
         return {"error": "IA no configurada."}
@@ -90,12 +91,37 @@ def generar_reto_con_ia(nivel, tipo_reto, historial_retos=[]):
         return {"error": "No pude generar un reto en este momento."}
 
 def evaluar_solucion_con_ia(reto_enunciado, solucion_usuario, tipo_reto):
-    # (Esta función no necesita cambios)
-    pass
+    if not GEMINI_API_KEY:
+        return "INCORRECTO: La evaluación no está configurada."
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    prompt = f"""
+    **Contexto:** Eres un tutor de programación estricto y preciso.
+    **Tarea:** Evaluar si la solución de un estudiante resuelve el problema planteado.
+    **Problema a Resolver:** "{reto_enunciado}"
+    **Solución del Estudiante en {tipo_reto}:** "{solucion_usuario}"
+    **Instrucciones:** Tu única tarea es determinar si la solución resuelve el problema específico. Si resuelve un problema diferente, es "INCORRECTO". Tu respuesta DEBE empezar con "CORRECTO:" o "INCORRECTO:".
+    """
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"INCORRECTO: Hubo un problema con el tutor de IA. Error: {e}"
 
 def chat_conversacional_con_ia(mensaje_usuario, estado_conversacion, ultimo_mensaje_bot=None, reto_actual_solucion=None):
-    # (Esta función no necesita cambios)
-    pass
+    if not GEMINI_API_KEY:
+        return "Lo siento, el chat no está disponible."
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    prompt = f"""
+    Eres "LogicBot", un tutor amigable.
+    **Contexto:** Estado: "{estado_conversacion}". Tu último mensaje: "{ultimo_mensaje_bot}". Mensaje del usuario: "{mensaje_usuario}".
+    **Reglas:** Sé contextual. Guía al usuario. Si dice 'me rindo', TU ÚNICA ACCIÓN es dar la solución: `{reto_actual_solucion}`. Rechaza temas no relacionados.
+    **Tu respuesta:**
+    """
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return "No estoy seguro de cómo responder. Intenta elegir una opción del menú."
 
 # --- FUNCIÓN PARA ENVIAR MENSAJES ---
 def responder_mensaje(numero_destinatario, texto_respuesta):
@@ -165,10 +191,11 @@ async def recibir_mensaje(request: Request):
             elif '3' in mensaje_texto or 'python' in mensaje_texto.lower(): tipo_reto_formato = 'Python'
             
             if tipo_reto_formato:
-                es_diario = usuario.get("tipo_reto_actual") == "diario"
+                # Leemos la intención (diario o practica) que guardamos en el paso anterior
+                intencion = usuario.get("tipo_reto_actual")
                 hoy = str(date.today())
 
-                if es_diario and usuario.get("ultimo_reto_diario") == hoy:
+                if intencion == "diario" and usuario.get("ultimo_reto_diario") == hoy:
                     responder_mensaje(numero_remitente, "Ya has completado tu reto diario de hoy. ¡Vuelve mañana!")
                     actualizar_usuario(numero_remitente, {"estado_conversacion": "menu_principal"})
                     enviar_menu_principal(numero_remitente)
@@ -188,7 +215,7 @@ async def recibir_mensaje(request: Request):
                         "reto_actual_enunciado": reto["enunciado"],
                         "reto_actual_solucion": reto["solucion_ideal"]
                     }
-                    if es_diario:
+                    if intencion == "diario":
                         actualizaciones["ultimo_reto_diario"] = hoy
                     actualizar_usuario(numero_remitente, actualizaciones)
                     responder_mensaje(numero_remitente, reto["enunciado"])
