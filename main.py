@@ -1,4 +1,4 @@
-# main.py (Corregido)
+# main.py (Versión Estable y Simplificada)
 
 import os
 import json
@@ -6,7 +6,6 @@ import requests
 import sqlite3
 import google.generativeai as genai
 from fastapi import FastAPI, Request, Response
-from datetime import date
 
 app = FastAPI()
 
@@ -18,30 +17,27 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-# --- CONFIGURACIÓN DE LA BASE DE DATOS ---
+# --- CONFIGURACIÓN DE LA BASE DE DATOS (SIMPLIFICADA) ---
 DB_NAME = "database.db"
 
 def inicializar_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
+    # Tabla mucho más simple, sin estados de conversación complejos
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS usuarios (
         numero_telefono TEXT PRIMARY KEY,
         nombre TEXT,
         nivel INTEGER,
-        estado_conversacion TEXT,
-        tipo_reto_actual TEXT,
-        ultimo_reto_diario TEXT,
-        reto_actual_titulo TEXT,
         reto_actual_enunciado TEXT,
         reto_actual_solucion TEXT,
-        ultimo_mensaje_bot TEXT
+        reto_actual_tipo TEXT
     )
     """)
     conn.commit()
     conn.close()
 
-# --- FUNCIONES DE BASE DE DATOS (sin cambios) ---
+# --- FUNCIONES DE BASE DE DATOS ---
 def obtener_usuario(numero_telefono):
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
@@ -56,8 +52,7 @@ def obtener_usuario(numero_telefono):
 def crear_usuario(numero_telefono, nombre):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO usuarios (numero_telefono, nombre, nivel, estado_conversacion) VALUES (?, ?, ?, ?)", 
-                   (numero_telefono, nombre, 1, 'menu_principal'))
+    cursor.execute("INSERT INTO usuarios (numero_telefono, nombre, nivel) VALUES (?, ?, ?)", (numero_telefono, nombre, 1))
     conn.commit()
     conn.close()
 
@@ -71,63 +66,62 @@ def actualizar_usuario(numero_telefono, datos):
     conn.commit()
     conn.close()
 
-# --- FUNCIONES DE IA (sin cambios) ---
-# ... (Las funciones generar_reto_con_ia, evaluar_solucion_con_ia, y chat_conversacional_con_ia se mantienen igual)
-def generar_reto_con_ia(nivel, tipo_reto, historial_retos=[]):
-    if not GEMINI_API_KEY:
-        return {"error": "IA no configurada."}
+# --- FUNCIONES DE IA (PROMPTS REFORZADOS) ---
+
+def generar_reto_con_ia(nivel, tipo_reto):
+    if not GEMINI_API_KEY: return {"error": "IA no configurada."}
     model = genai.GenerativeModel('gemini-1.5-flash')
     prompt = f"""
-    Eres un generador de retos de programación para un estudiante de nivel {nivel} en el formato **{tipo_reto}**.
-    El usuario ya ha resuelto retos sobre los siguientes temas: {', '.join(historial_retos)}. **NO repitas estas temáticas.** Genera un reto nuevo y creativo.
-    Tu respuesta DEBE ser un objeto JSON válido con "titulo", "enunciado" y "solucion_ideal".
+    Genera un reto de programación de nivel {nivel} para **{tipo_reto}**.
+    Tu respuesta DEBE ser un objeto JSON válido con "enunciado" y "solucion_ideal".
+    - "enunciado": El texto del reto, pidiendo la solución en {tipo_reto}.
+    - "solucion_ideal": La solución ejemplar en {tipo_reto}.
     """
     try:
         response = model.generate_content(prompt)
-        json_response = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
-        return json_response
+        return json.loads(response.text.strip().replace("```json", "").replace("```", ""))
     except Exception as e:
         print(f"Error al generar reto con IA: {e}")
-        return {"error": "No pude generar un reto en este momento."}
+        return {"error": "No pude generar un reto."}
 
 def evaluar_solucion_con_ia(reto_enunciado, solucion_usuario, tipo_reto):
-    if not GEMINI_API_KEY:
-        return "INCORRECTO: La evaluación no está configurada."
+    if not GEMINI_API_KEY: return "INCORRECTO: La evaluación no está configurada."
     model = genai.GenerativeModel('gemini-1.5-flash')
     prompt = f"""
-    **Contexto:** Eres un tutor de programación estricto y preciso.
-    **Tarea:** Evaluar si la solución de un estudiante resuelve el problema planteado.
-    **Problema a Resolver:** "{reto_enunciado}"
-    **Solución del Estudiante en {tipo_reto}:** "{solucion_usuario}"
-    **Instrucciones:** Tu única tarea es determinar si la solución resuelve el problema específico. Si resuelve un problema diferente, es "INCORRECTO". Tu respuesta DEBE empezar con "CORRECTO:" o "INCORRECTO:".
+    **Tarea Estricta:** Evalúa si la solución del estudiante resuelve el problema.
+    **Problema:** "{reto_enunciado}"
+    **Solución del Estudiante ({tipo_reto}):** "{solucion_usuario}"
+    **Instrucciones:** Si la solución es irrelevante al problema, es "INCORRECTO". Tu respuesta DEBE empezar con "CORRECTO:" o "INCORRECTO:", seguido por un feedback conciso.
     """
     try:
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        return f"INCORRECTO: Hubo un problema con el tutor de IA. Error: {e}"
+        return f"INCORRECTO: Hubo un problema con el tutor de IA. {e}"
 
-def chat_conversacional_con_ia(mensaje_usuario, estado_conversacion, ultimo_mensaje_bot=None, reto_actual_solucion=None):
-    if not GEMINI_API_KEY:
-        return "Lo siento, el chat no está disponible."
+def chat_conversacional_con_ia(mensaje_usuario, reto_actual_solucion=None):
+    if not GEMINI_API_KEY: return "Lo siento, el chat no está disponible."
     model = genai.GenerativeModel('gemini-1.5-flash')
     prompt = f"""
-    Eres "LogicBot", un tutor amigable.
-    **Contexto:** Estado: "{estado_conversacion}". Tu último mensaje: "{ultimo_mensaje_bot}". Mensaje del usuario: "{mensaje_usuario}".
-    **Reglas:** Sé contextual. Guía al usuario. Si dice 'me rindo', TU ÚNICA ACCIÓN es dar la solución: `{reto_actual_solucion}`. Rechaza temas no relacionados.
+    Eres "LogicBot", un tutor de programación.
+    **Comandos Principales:** `reto python`, `reto java`, `reto pseudocodigo`, `solucion: [tu respuesta]`, `me rindo`.
+    **Reglas:**
+    1.  **Guía al Usuario:** Si el usuario parece perdido, recuérdale los comandos.
+    2.  **Ayuda con Dudas:** Responde preguntas sobre programación.
+    3.  **Si se Rinde (Instrucción Estricta):** Si el usuario dice "me rindo" y hay una solución (`{reto_actual_solucion}`), entrégala directamente sin hacer más preguntas.
+    4.  **Mantente Enfocado:** Rechaza amablemente temas no relacionados.
+    **Mensaje del usuario:** "{mensaje_usuario}"
     **Tu respuesta:**
     """
     try:
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        return "No estoy seguro de cómo responder. Intenta elegir una opción del menú."
+        return "No estoy seguro de cómo responder. Intenta con un comando como `reto python`."
 
 # --- FUNCIÓN PARA ENVIAR MENSAJES ---
 def responder_mensaje(numero_destinatario, texto_respuesta):
-    actualizar_usuario(numero_destinatario, {"ultimo_mensaje_bot": texto_respuesta})
     if not WHATSAPP_TOKEN or not ID_NUMERO_TELEFONO:
-        print("ERROR: Faltan las variables de entorno de WhatsApp.")
         return
     url = f"https://graph.facebook.com/v19.0/{ID_NUMERO_TELEFONO}/messages"
     headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
@@ -138,16 +132,7 @@ def responder_mensaje(numero_destinatario, texto_respuesta):
     except requests.exceptions.RequestException as e:
         print(f"Error al enviar mensaje: {e}")
 
-# --- LÓGICA DE MENÚS ---
-def enviar_menu_principal(numero):
-    texto_menu = "¡Estoy listo para ayudarte! ✨\n\nElige una opción:\n1️⃣. 🧠 Reto Diario\n2️⃣. 🏋️‍♂️ Retos de Práctica"
-    responder_mensaje(numero, texto_menu)
-
-def enviar_menu_tipo_reto(numero):
-    texto_menu = "¡Excelente! ¿Cómo prefieres practicar?\n\nElige el formato:\n1️⃣. 📝 Pseudocódigo\n2️⃣. ☕ Java\n3️⃣. 🐍 Python"
-    responder_mensaje(numero, texto_menu)
-
-# --- WEBHOOK (LÓGICA PRINCIPAL CORREGIDA) ---
+# --- WEBHOOK (LÓGICA PRINCIPAL SIMPLIFICADA) ---
 @app.post("/webhook")
 async def recibir_mensaje(request: Request):
     body = await request.json()
@@ -166,82 +151,69 @@ async def recibir_mensaje(request: Request):
 
         if not usuario:
             crear_usuario(numero_remitente, nombre_usuario)
-            responder_mensaje(numero_remitente, f"¡Hola, {nombre_usuario}! 👋 Soy LogicBot.")
-            enviar_menu_principal(numero_remitente)
+            bienvenida = (
+                f"¡Hola, {nombre_usuario}! 👋 Soy LogicBot, tu tutor de IA.\n\n"
+                "Estoy listo para ayudarte a practicar. Pídeme un reto cuando quieras con uno de estos comandos:\n"
+                "- `reto python`\n"
+                "- `reto java`\n"
+                "- `reto pseudocodigo`"
+            )
+            responder_mensaje(numero_remitente, bienvenida)
             return Response(status_code=200)
 
-        estado = usuario.get("estado_conversacion", "menu_principal")
+        mensaje_lower = mensaje_texto.lower()
 
-        # --- MÁQUINA DE ESTADOS (CORREGIDA) ---
-        if estado == 'menu_principal':
-            if '1' in mensaje_texto or 'diario' in mensaje_texto.lower():
-                actualizar_usuario(numero_remitente, {"estado_conversacion": "eligiendo_tipo_reto", "tipo_reto_actual": "diario"})
-                enviar_menu_tipo_reto(numero_remitente)
-            elif '2' in mensaje_texto or 'práctica' in mensaje_texto.lower():
-                actualizar_usuario(numero_remitente, {"estado_conversacion": "eligiendo_tipo_reto", "tipo_reto_actual": "practica"})
-                enviar_menu_tipo_reto(numero_remitente)
-            else:
-                respuesta_chat = chat_conversacional_con_ia(mensaje_texto, estado, usuario.get("ultimo_mensaje_bot"))
-                responder_mensaje(numero_remitente, respuesta_chat)
-
-        elif estado == 'eligiendo_tipo_reto':
-            tipo_reto_formato = None
-            if '1' in mensaje_texto or 'pseudo' in mensaje_texto.lower(): tipo_reto_formato = 'Pseudocódigo'
-            elif '2' in mensaje_texto or 'java' in mensaje_texto.lower(): tipo_reto_formato = 'Java'
-            elif '3' in mensaje_texto or 'python' in mensaje_texto.lower(): tipo_reto_formato = 'Python'
+        if mensaje_lower.startswith("reto"):
+            tipo_reto = None
+            if "python" in mensaje_lower: tipo_reto = "Python"
+            elif "java" in mensaje_lower: tipo_reto = "Java"
+            elif "pseudo" in mensaje_lower: tipo_reto = "Pseudocódigo"
             
-            if tipo_reto_formato:
-                # Leemos la intención (diario o practica) que guardamos en el paso anterior
-                intencion = usuario.get("tipo_reto_actual")
-                hoy = str(date.today())
-
-                if intencion == "diario" and usuario.get("ultimo_reto_diario") == hoy:
-                    responder_mensaje(numero_remitente, "Ya has completado tu reto diario de hoy. ¡Vuelve mañana!")
-                    actualizar_usuario(numero_remitente, {"estado_conversacion": "menu_principal"})
-                    enviar_menu_principal(numero_remitente)
-                    return Response(status_code=200)
-
-                responder_mensaje(numero_remitente, f"¡Perfecto! Generando un reto de {tipo_reto_formato}...")
-                reto = generar_reto_con_ia(usuario['nivel'], tipo_reto_formato)
+            if tipo_reto:
+                responder_mensaje(numero_remitente, f"¡Entendido! Buscando un reto de {tipo_reto} (Nivel {usuario['nivel']})...")
+                reto = generar_reto_con_ia(usuario['nivel'], tipo_reto)
                 if "error" in reto:
                     responder_mensaje(numero_remitente, reto["error"])
-                    actualizar_usuario(numero_remitente, {"estado_conversacion": "menu_principal"})
-                    enviar_menu_principal(numero_remitente)
                 else:
-                    actualizaciones = {
-                        "estado_conversacion": "resolviendo_reto",
-                        "tipo_reto_actual": tipo_reto_formato,
-                        "reto_actual_titulo": reto["titulo"],
+                    actualizar_usuario(numero_remitente, {
                         "reto_actual_enunciado": reto["enunciado"],
-                        "reto_actual_solucion": reto["solucion_ideal"]
-                    }
-                    if intencion == "diario":
-                        actualizaciones["ultimo_reto_diario"] = hoy
-                    actualizar_usuario(numero_remitente, actualizaciones)
+                        "reto_actual_solucion": reto["solucion_ideal"],
+                        "reto_actual_tipo": tipo_reto
+                    })
                     responder_mensaje(numero_remitente, reto["enunciado"])
             else:
-                respuesta_chat = chat_conversacional_con_ia(mensaje_texto, estado, usuario.get("ultimo_mensaje_bot"))
-                responder_mensaje(numero_remitente, respuesta_chat)
+                responder_mensaje(numero_remitente, "No especificaste un lenguaje válido. Prueba con `reto python`, `reto java` o `reto pseudocodigo`.")
 
-        elif estado == 'resolviendo_reto':
-            if mensaje_texto.lower().startswith("solucion:"):
+        elif mensaje_lower.startswith("solucion:"):
+            if not usuario.get("reto_actual_enunciado"):
+                responder_mensaje(numero_remitente, "No tienes un reto activo para resolver. ¡Pide uno nuevo!")
+            else:
                 solucion_usuario = mensaje_texto[len("solucion:"):].strip()
-                feedback = evaluar_solucion_con_ia(usuario["reto_actual_enunciado"], solucion_usuario, usuario["tipo_reto_actual"])
+                feedback = evaluar_solucion_con_ia(usuario["reto_actual_enunciado"], solucion_usuario, usuario["reto_actual_tipo"])
                 responder_mensaje(numero_remitente, feedback)
                 if feedback.strip().upper().startswith("CORRECTO"):
                     nuevo_nivel = usuario["nivel"] + 1
-                    actualizar_usuario(numero_remitente, {"nivel": nuevo_nivel, "estado_conversacion": "menu_principal"})
-                    responder_mensaje(numero_remitente, f"\n¡Felicidades, {usuario['nombre']}! ✨ Has avanzado al nivel {nuevo_nivel}.")
-                    enviar_menu_principal(numero_remitente)
-            else:
-                respuesta_chat = chat_conversacional_con_ia(mensaje_texto, estado, usuario.get("ultimo_mensaje_bot"), usuario.get("reto_actual_solucion"))
-                responder_mensaje(numero_remitente, respuesta_chat)
+                    actualizar_usuario(numero_remitente, {"nivel": nuevo_nivel, "reto_actual_enunciado": None, "reto_actual_solucion": None, "reto_actual_tipo": None})
+                    responder_mensaje(numero_remitente, f"¡Felicidades! Has avanzado al nivel {nuevo_nivel}. Pide tu próximo reto cuando quieras.")
+
+        elif mensaje_lower == "me rindo":
+             if not usuario.get("reto_actual_solucion"):
+                responder_mensaje(numero_remitente, "No tienes ningún reto activo para rendirte. ¡Pide uno!")
+             else:
+                respuesta = f"¡No te preocupes! La práctica hace al maestro. Aquí tienes la solución:\n\n```\n{usuario['reto_actual_solucion']}\n```\n\nAnalízala y pide otro reto cuando estés listo."
+                actualizar_usuario(numero_remitente, {"reto_actual_enunciado": None, "reto_actual_solucion": None, "reto_actual_tipo": None})
+                responder_mensaje(numero_remitente, respuesta)
+        
+        else:
+            respuesta_chat = chat_conversacional_con_ia(mensaje_texto, usuario.get("reto_actual_solucion"))
+            responder_mensaje(numero_remitente, respuesta_chat)
 
     except Exception as e:
         print(f"Ocurrió un error no manejado: {e}")
         pass
     return Response(status_code=200)
 
+# --- El resto de funciones se mantienen igual ---
 @app.on_event("startup")
 async def startup_event():
     inicializar_db()
