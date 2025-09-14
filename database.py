@@ -4,8 +4,7 @@ import sqlite3
 import json
 from datetime import date
 
-# Cambiado a v3 para forzar la actualización del esquema en Render
-DB_NAME = "logicbot_v3.db" 
+DB_NAME = "logicbot_v4.db" 
 
 def inicializar_db():
     """Crea la tabla de usuarios si no existe."""
@@ -21,11 +20,10 @@ def inicializar_db():
         ultima_conexion TEXT,
         estado_conversacion TEXT,
         
-        -- Columnas para el progreso del curso
         curso_actual TEXT,
         leccion_actual INTEGER DEFAULT 0,
+        intentos_fallidos INTEGER DEFAULT 0, -- NUEVA COLUMNA
 
-        -- Columnas para los retos
         tematica_actual TEXT,
         tipo_reto_actual TEXT,
         reto_actual_enunciado TEXT,
@@ -40,7 +38,6 @@ def inicializar_db():
     conn.close()
 
 def obtener_usuario(numero_telefono):
-    """Obtiene los datos de un usuario por su número de teléfono."""
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -50,7 +47,6 @@ def obtener_usuario(numero_telefono):
     return dict(usuario) if usuario else None
 
 def crear_usuario(numero_telefono, nombre):
-    """Crea un nuevo usuario en la base de datos."""
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     hoy = str(date.today())
@@ -62,7 +58,6 @@ def crear_usuario(numero_telefono, nombre):
     conn.close()
 
 def actualizar_usuario(numero_telefono, datos):
-    """Actualiza uno o más campos de un usuario."""
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     campos = ", ".join([f"{key} = ?" for key in datos.keys()])

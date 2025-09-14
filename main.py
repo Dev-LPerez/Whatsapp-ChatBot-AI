@@ -1,4 +1,4 @@
-# main.py (LogicBot v4.0 - Tutor Inteligente con Rutas de Aprendizaje)
+# main.py (LogicBot v4.2 - Tutor Adaptativo y Conversacional)
 
 import json
 from fastapi import FastAPI, Request, Response
@@ -10,19 +10,13 @@ from whatsapp_utils import responder_mensaje
 
 app = FastAPI()
 
-# --- ESTRUCTURA DE CURSOS ---
 CURSOS = {
     "python": {
         "nombre": "Python Essentials 🐍",
-        "lecciones": [
-            "Variables y Tipos de Datos",
-            "Operadores Aritméticos",
-            "Condicionales (if/else)",
-            "Bucles (for y while)",
-            "Funciones"
-        ]
+        "lecciones": ["Variables y Tipos de Datos", "Operadores Aritméticos", "Condicionales (if/else)", "Bucles (for y while)", "Funciones"]
     }
 }
+UMBRAL_DE_FALLOS = 2
 
 @app.post("/webhook")
 async def recibir_mensaje(request: Request):
@@ -30,8 +24,7 @@ async def recibir_mensaje(request: Request):
     print(json.dumps(body, indent=2))
     try:
         value = body['entry'][0]['changes'][0]['value']
-        if not (value.get("messages") and value['messages'][0]):
-            return Response(status_code=200)
+        if not (value.get("messages") and value['messages'][0]): return Response(status_code=200)
         
         numero_remitente = value['messages'][0]['from']
         mensaje_texto = value['messages'][0]['text']['body']
@@ -43,10 +36,7 @@ async def recibir_mensaje(request: Request):
         if not usuario:
             db.crear_usuario(numero_remitente, nombre_usuario)
             usuario = db.obtener_usuario(numero_remitente)
-            bienvenida = (
-                f"¡Hola, {nombre_usuario}! 👋 Soy LogicBot, tu tutor de IA personal.\n\n"
-                "Puedes pedirme un `reto python` o `empezar curso python` para aprender desde cero. 🚀"
-            )
+            bienvenida = (f"¡Hola, {nombre_usuario}! 👋 Soy LogicBot, tu tutor de IA. Puedes pedirme un `reto python` o `empezar curso python` para aprender desde cero. 🚀")
             responder_mensaje(numero_remitente, bienvenida, [])
             return Response(status_code=200)
         
@@ -68,19 +58,9 @@ async def recibir_mensaje(request: Request):
             if curso_key:
                 curso = CURSOS[curso_key]
                 leccion_actual = 0
-                db.actualizar_usuario(numero_remitente, {
-                    "estado_conversacion": "en_curso",
-                    "curso_actual": curso_key,
-                    "leccion_actual": leccion_actual
-                })
-                
-                mensaje_inicio = (
-                    f"¡Excelente decisión! 🎉 Has iniciado el curso: *{curso['nombre']}*.\n\n"
-                    f"Tu primera lección es sobre **{curso['lecciones'][leccion_actual]}**.\n\n"
-                    "Estoy generando tu primer reto. ¡Dame un segundo! 👨‍💻"
-                )
+                db.actualizar_usuario(numero_remitente, {"estado_conversacion": "en_curso", "curso_actual": curso_key, "leccion_actual": leccion_actual, "intentos_fallidos": 0})
+                mensaje_inicio = (f"¡Excelente decisión! 🎉 Has iniciado el curso: *{curso['nombre']}*.\n\nTu primera lección es sobre **{curso['lecciones'][leccion_actual]}**.\n\nEstoy generando tu primer reto. ¡Dame un segundo! 👨‍💻")
                 responder_mensaje(numero_remitente, mensaje_inicio, historial_chat)
-                
                 tematica = curso['lecciones'][leccion_actual]
                 reto = ai.generar_reto_con_ia(usuario['nivel'], "Python", "Fácil", tematica)
                 if "error" in reto:
@@ -92,7 +72,27 @@ async def recibir_mensaje(request: Request):
             else:
                 responder_mensaje(numero_remitente, "Curso no reconocido. Por ahora, puedes `empezar curso python`.", historial_chat)
 
+        elif estado == "esperando_ayuda_teorica":
+            curso = CURSOS[usuario["curso_actual"]]
+            tema = curso["lecciones"][usuario["leccion_actual"]]
+            if "sí" in mensaje_lower or "si" in mensaje_lower:
+                explicacion = ai.explicar_tema_con_ia(tema)
+                responder_mensaje(numero_remitente, explicacion, historial_chat)
+                responder_mensaje(numero_remitente, "Ahora que hemos repasado, ¡vamos a intentarlo con un nuevo reto sobre el mismo tema!", historial_chat)
+                db.actualizar_usuario(numero_remitente, {"intentos_fallidos": 0, "estado_conversacion": "en_curso"})
+                reto = ai.generar_reto_con_ia(usuario['nivel'], "Python", "Fácil", tema)
+                if "error" in reto:
+                    responder_mensaje(numero_remitente, reto["error"], historial_chat)
+                    db.actualizar_usuario(numero_remitente, {"estado_conversacion": "menu_principal"})
+                else:
+                    db.actualizar_usuario(numero_remitente, {"reto_actual_enunciado": reto["enunciado"], "reto_actual_solucion": reto["solucion_ideal"], "reto_actual_pistas": json.dumps(reto["pistas"]), "pistas_usadas": 0})
+                    responder_mensaje(numero_remitente, reto["enunciado"], historial_chat)
+            else:
+                db.actualizar_usuario(numero_remitente, {"estado_conversacion": "en_curso"})
+                responder_mensaje(numero_remitente, "¡De acuerdo! Puedes seguir intentando el reto actual cuando quieras.", historial_chat)
+
         elif mensaje_lower.startswith("reto"):
+            db.actualizar_usuario(numero_remitente, {"curso_actual": None}) # Sale del curso si pide reto aleatorio
             tipo_reto, tematica = None, None
             if "python" in mensaje_lower: tipo_reto = "Python"
             elif "java" in mensaje_lower: tipo_reto = "Java"
@@ -100,7 +100,7 @@ async def recibir_mensaje(request: Request):
             if "sobre" in mensaje_lower: tematica = mensaje_texto.split("sobre", 1)[1].strip()
             
             if tipo_reto:
-                db.actualizar_usuario(numero_remitente, {"estado_conversacion": "eligiendo_dificultad", "tipo_reto_actual": tipo_reto, "tematica_actual": tematica, "curso_actual": None})
+                db.actualizar_usuario(numero_remitente, {"estado_conversacion": "eligiendo_dificultad", "tipo_reto_actual": tipo_reto, "tematica_actual": tematica})
                 responder_mensaje(numero_remitente, "¿Qué nivel de dificultad prefieres? 🤔\n\n1. Fácil 🌱\n2. Intermedio 🔥\n3. Difícil 🤯", historial_chat)
             else:
                 responder_mensaje(numero_remitente, "Debes especificar un lenguaje. Ejemplo: `reto python sobre bucles`.", historial_chat)
@@ -124,7 +124,7 @@ async def recibir_mensaje(request: Request):
                     responder_mensaje(numero_remitente, reto["enunciado"], historial_chat)
             else:
                 responder_mensaje(numero_remitente, "Por favor, elige una dificultad: 1, 2 o 3.", historial_chat)
-        
+
         elif mensaje_lower == "pista":
             if not usuario.get("reto_actual_enunciado"):
                 responder_mensaje(numero_remitente, "No tienes un reto activo para pedir una pista.", historial_chat)
@@ -139,15 +139,15 @@ async def recibir_mensaje(request: Request):
         
         elif mensaje_lower == "me rindo":
             if not usuario.get("reto_actual_solucion"):
-                responder_mensaje(numero_remitente, "Tranquilo, no tienes ningún reto activo. ¡Pide uno cuando quieras! 👍", historial_chat)
+                responder_mensaje(numero_remitente, "Tranquilo, no tienes ningún reto activo para rendirte. ¡Pide uno cuando quieras! 👍", historial_chat)
             else:
                 solucion = usuario.get("reto_actual_solucion")
                 mensaje_final = (
-                    f"¡No te preocupes! A veces los retos son complicados. Lo importante es entender la solución. 💪\n\n"
-                    f"Aquí la tienes:\n\n```\n{solucion}\n```\n\n"
-                    "¡Analízala y verás que la próxima vez lo harás genial! ✨"
+                    f"¡No te preocupes! Rendirse es parte de aprender. Lo importante es entender cómo funciona. 💪\n\n"
+                    f"Aquí tienes la solución ideal:\n\n```\n{solucion}\n```\n\n"
+                    "¡Analízala y verás que la próxima vez lo conseguirás! Sigue practicando. ✨"
                 )
-                db.actualizar_usuario(numero_remitente, {"estado_conversacion": "menu_principal", "reto_actual_enunciado": None, "reto_actual_solucion": None, "curso_actual": None})
+                db.actualizar_usuario(numero_remitente, {"estado_conversacion": "menu_principal", "reto_actual_enunciado": None, "reto_actual_solucion": None, "curso_actual": None, "intentos_fallidos": 0})
                 responder_mensaje(numero_remitente, mensaje_final, historial_chat)
 
         elif mensaje_lower == "mi perfil":
@@ -162,11 +162,15 @@ async def recibir_mensaje(request: Request):
 
         else:
             if estado in ["resolviendo_reto", "en_curso"]:
-                solucion_usuario = mensaje_texto.strip()
-                feedback = ai.evaluar_solucion_con_ia(usuario["reto_actual_enunciado"], solucion_usuario, usuario["reto_actual_tipo"])
-                responder_mensaje(numero_remitente, feedback, historial_chat)
+                feedback = ai.evaluar_solucion_con_ia(usuario["reto_actual_enunciado"], mensaje_texto, usuario["reto_actual_tipo"])
                 
-                if feedback.strip().upper().startswith("✅"):
+                if "[PREGUNTA]" in feedback:
+                    tema_actual = CURSOS[usuario["curso_actual"]]["lecciones"][usuario["leccion_actual"]] if usuario.get("curso_actual") else "programación en general"
+                    respuesta_conversacional = ai.chat_conversacional_con_ia(mensaje_texto, historial_chat, CURSOS, tema_actual)
+                    responder_mensaje(numero_remitente, respuesta_conversacional, historial_chat)
+                
+                elif feedback.strip().upper().startswith("✅"):
+                    db.actualizar_usuario(numero_remitente, {"intentos_fallidos": 0})
                     puntos_ganados = 10 * usuario["racha_dias"]
                     puntos_totales = usuario.get("puntos", 0) + puntos_ganados
                     nivel_actual = usuario["nivel"]
@@ -199,10 +203,21 @@ async def recibir_mensaje(request: Request):
                         else:
                             responder_mensaje(numero_remitente, f"¡Felicidades! 🥳 ¡Has completado el curso *{curso['nombre']}*! Has demostrado una gran habilidad. ¿Listo para un reto aleatorio?", historial_chat)
                             db.actualizar_usuario(numero_remitente, {"estado_conversacion": "menu_principal", "curso_actual": None})
-                    else:
+                    else: # Si no estaba en un curso, simplemente vuelve al menú
                         db.actualizar_usuario(numero_remitente, {"estado_conversacion": "menu_principal"})
-            else:
-                respuesta_chat = ai.chat_conversacional_con_ia(mensaje_texto, historial_chat)
+
+                else: # Es una solución incorrecta
+                    responder_mensaje(numero_remitente, feedback, historial_chat)
+                    if estado == "en_curso":
+                        intentos = usuario.get("intentos_fallidos", 0) + 1
+                        db.actualizar_usuario(numero_remitente, {"intentos_fallidos": intentos})
+                        if intentos >= UMBRAL_DE_FALLOS:
+                            tema = CURSOS[usuario["curso_actual"]]["lecciones"][usuario["leccion_actual"]]
+                            db.actualizar_usuario(numero_remitente, {"estado_conversacion": "esperando_ayuda_teorica"})
+                            responder_mensaje(numero_remitente, f"Veo que este tema de **{tema}** se está complicando. ¿Quieres que te dé una explicación teórica sencilla antes de volver a intentarlo? (responde `sí` o `no`)", historial_chat)
+            
+            else: # Conversación general
+                respuesta_chat = ai.chat_conversacional_con_ia(mensaje_texto, historial_chat, CURSOS)
                 responder_mensaje(numero_remitente, respuesta_chat, historial_chat)
 
     except Exception as e:
