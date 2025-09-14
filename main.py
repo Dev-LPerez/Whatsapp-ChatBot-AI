@@ -1,4 +1,4 @@
-# main.py (LogicBot v3.1 - Versión Refactorizada)
+# main.py (LogicBot v3.2 - Flujo de Retos Mejorado)
 
 import json
 from fastapi import FastAPI, Request, Response
@@ -11,7 +11,6 @@ from whatsapp_utils import responder_mensaje
 
 app = FastAPI()
 
-# --- WEBHOOK (LÓGICA PRINCIPAL) ---
 @app.post("/webhook")
 async def recibir_mensaje(request: Request):
     body = await request.json()
@@ -85,24 +84,6 @@ async def recibir_mensaje(request: Request):
                     responder_mensaje(numero_remitente, reto["enunciado"], historial_chat)
             else:
                 responder_mensaje(numero_remitente, "Por favor, elige una dificultad: 1, 2 o 3.", historial_chat)
-
-        elif mensaje_lower.startswith("solucion:"):
-            if not usuario.get("reto_actual_enunciado"):
-                responder_mensaje(numero_remitente, "¡Ups! 😅 No tienes un reto activo.", historial_chat)
-            else:
-                solucion_usuario = mensaje_texto[len("solucion:"):].strip()
-                feedback = ai.evaluar_solucion_con_ia(usuario["reto_actual_enunciado"], solucion_usuario, usuario["reto_actual_tipo"])
-                responder_mensaje(numero_remitente, feedback, historial_chat)
-                if feedback.strip().upper().startswith("✅"):
-                    puntos_ganados = 10 * usuario["racha_dias"]
-                    puntos_totales = usuario.get("puntos", 0) + puntos_ganados
-                    nivel_actual = usuario["nivel"]
-                    nuevo_nivel = (puntos_totales // 100) + 1
-                    db.actualizar_usuario(numero_remitente, {"puntos": puntos_totales, "nivel": nuevo_nivel, "estado_conversacion": "menu_principal", "reto_actual_enunciado": None})
-                    mensaje_felicitacion = f"¡Ganaste *{puntos_ganados} puntos* (x{usuario['racha_dias']} de racha 🔥)! Tienes un total de {puntos_totales} puntos."
-                    if nuevo_nivel > nivel_actual:
-                        mensaje_felicitacion += f"\n\n🚀 ¡FELICIDADES! ¡Has subido al Nivel {nuevo_nivel}!"
-                    responder_mensaje(numero_remitente, mensaje_felicitacion, historial_chat)
         
         elif mensaje_lower == "pista":
             if not usuario.get("reto_actual_enunciado"):
@@ -117,12 +98,23 @@ async def recibir_mensaje(request: Request):
                     responder_mensaje(numero_remitente, "¡Ya has usado todas las pistas! 😥 Si quieres, puedes rendirte escribiendo `me rindo`.", historial_chat)
         
         elif mensaje_lower == "me rindo":
-             if not usuario.get("reto_actual_solucion"):
+            if not usuario.get("reto_actual_solucion"):
                 responder_mensaje(numero_remitente, "Tranquilo, no tienes ningún reto activo para rendirte. ¡Pide uno cuando quieras! 👍", historial_chat)
-             else:
-                respuesta_con_explicacion = ai.chat_conversacional_con_ia(mensaje_texto, historial_chat, usuario.get("reto_actual_solucion"))
-                db.actualizar_usuario(numero_remitente, {"estado_conversacion": "menu_principal", "reto_actual_enunciado": None})
-                responder_mensaje(numero_remitente, respuesta_con_explicacion, historial_chat)
+            else:
+                solucion = usuario.get("reto_actual_solucion")
+                mensaje_final = (
+                    f"¡No te preocupes! Rendirse es parte de aprender. Lo importante es entender cómo funciona. 💪\n\n"
+                    f"Aquí tienes la solución ideal:\n\n```\n{solucion}\n```\n\n"
+                    "¡Analízala y verás que la próxima vez lo conseguirás! Sigue practicando. ✨"
+                )
+                db.actualizar_usuario(numero_remitente, {
+                    "estado_conversacion": "menu_principal",
+                    "reto_actual_enunciado": None,
+                    "reto_actual_solucion": None,
+                    "reto_actual_pistas": None,
+                    "reto_actual_tipo": None
+                })
+                responder_mensaje(numero_remitente, mensaje_final, historial_chat)
 
         elif mensaje_lower == "mi perfil":
             perfil = (
@@ -135,8 +127,36 @@ async def recibir_mensaje(request: Request):
             responder_mensaje(numero_remitente, perfil, historial_chat)
 
         else:
-            respuesta_chat = ai.chat_conversacional_con_ia(mensaje_texto, historial_chat, usuario.get("reto_actual_solucion"))
-            responder_mensaje(numero_remitente, respuesta_chat, historial_chat)
+            # Si el usuario está resolviendo un reto, cualquier otro mensaje es una posible solución
+            if estado == "resolviendo_reto":
+                solucion_usuario = mensaje_texto.strip()
+                feedback = ai.evaluar_solucion_con_ia(usuario["reto_actual_enunciado"], solucion_usuario, usuario["reto_actual_tipo"])
+                responder_mensaje(numero_remitente, feedback, historial_chat)
+                
+                # Si la solución fue correcta, actualizamos puntos y estado
+                if feedback.strip().upper().startswith("✅"):
+                    puntos_ganados = 10 * usuario["racha_dias"]
+                    puntos_totales = usuario.get("puntos", 0) + puntos_ganados
+                    nivel_actual = usuario["nivel"]
+                    nuevo_nivel = (puntos_totales // 100) + 1
+                    db.actualizar_usuario(numero_remitente, {
+                        "puntos": puntos_totales, 
+                        "nivel": nuevo_nivel, 
+                        "estado_conversacion": "menu_principal", 
+                        "reto_actual_enunciado": None,
+                        "reto_actual_solucion": None,
+                        "reto_actual_pistas": None,
+                        "reto_actual_tipo": None
+                    })
+                    mensaje_felicitacion = f"¡Ganaste *{puntos_ganados} puntos* (x{usuario['racha_dias']} de racha 🔥)! Tienes un total de {puntos_totales} puntos."
+                    if nuevo_nivel > nivel_actual:
+                        mensaje_felicitacion += f"\n\n🚀 ¡FELICIDADES! ¡Has subido al Nivel {nuevo_nivel}!"
+                    responder_mensaje(numero_remitente, mensaje_felicitacion, historial_chat)
+            
+            # Si no está resolviendo un reto, es una conversación normal
+            else:
+                respuesta_chat = ai.chat_conversacional_con_ia(mensaje_texto, historial_chat)
+                responder_mensaje(numero_remitente, respuesta_chat, historial_chat)
 
     except Exception as e:
         print(f"Ocurrió un error no manejado: {e}")
@@ -144,12 +164,10 @@ async def recibir_mensaje(request: Request):
 
 @app.on_event("startup")
 async def startup_event():
-    """Inicializa la base de datos al iniciar la aplicación."""
     db.inicializar_db()
 
 @app.get("/webhook")
 async def verificar_webhook(request: Request):
-    """Verifica el token de la API de WhatsApp."""
     VERIFY_TOKEN = "micodigosecreto"
     mode = request.query_params.get("hub.mode")
     token = request.query_params.get("hub.verify_token")

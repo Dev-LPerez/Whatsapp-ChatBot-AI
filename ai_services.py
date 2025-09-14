@@ -30,17 +30,18 @@ def generar_reto_con_ia(nivel, tipo_reto, dificultad, tematica=None):
         return {"error": f"No pude generar el reto. Error de IA: {e}"}
 
 def evaluar_solucion_con_ia(reto_enunciado, solucion_usuario, tipo_reto):
-    """Evalúa la solución de un usuario con la IA de Gemini."""
+    """Evalúa si el mensaje de un usuario resuelve el reto, incluso si no es solo código."""
     if not GEMINI_API_KEY: return "❌ *INCORRECTO:* La evaluación no está configurada."
     model = genai.GenerativeModel('gemini-1.5-flash')
     prompt = f"""
     **Contexto:** Eres un tutor de programación estricto y preciso.
-    **Tarea:** Evaluar si la solución de un estudiante resuelve el problema planteado.
+    **Tarea:** Evaluar si el mensaje de un estudiante contiene una solución que resuelve el problema planteado. El estudiante puede incluir texto adicional junto al código.
     **Problema a Resolver:** "{reto_enunciado}"
-    **Solución del Estudiante en {tipo_reto}:** "{solucion_usuario}"
+    **Mensaje del Estudiante (potencial solución en {tipo_reto}):** "{solucion_usuario}"
     **Instrucciones de Evaluación:**
-    1.  **Compara Estrictamente:** Tu única tarea es determinar si la solución resuelve el **Problema a Resolver**. Si resuelve un problema diferente, tu respuesta DEBE ser "INCORRECTO".
-    2.  **Formato Obligatorio:** Si es correcta, empieza con "✅ *¡CORRECTO!*:". Si es incorrecta, empieza con "❌ *INCORRECTO:*:", seguido de una pista clara.
+    1.  **Identifica la Intención:** Primero, determina si el mensaje es un intento de resolver el problema. Si es una pregunta o un comentario, considéralo incorrecto.
+    2.  **Compara Estrictamente:** Si es un intento de solución, determina si el código proporcionado resuelve el **Problema a Resolver**. Si resuelve un problema diferente o está incompleto, tu respuesta DEBE ser "INCORRECTO".
+    3.  **Formato Obligatorio:** Si es correcta, empieza con "✅ *¡CORRECTO!*:". Si es incorrecta, empieza con "❌ *INCORRECTO:*:", seguido de una pista clara y amigable.
     """
     try:
         response = model.generate_content(prompt)
@@ -48,7 +49,7 @@ def evaluar_solucion_con_ia(reto_enunciado, solucion_usuario, tipo_reto):
     except Exception as e:
         return f"❌ *INCORRECTO:* Hubo un problema con mi cerebro de IA. ¿Podrías intentar de nuevo? Error: {e}"
 
-def chat_conversacional_con_ia(mensaje_usuario, historial_chat, reto_actual_solucion=None):
+def chat_conversacional_con_ia(mensaje_usuario, historial_chat):
     """Maneja una conversación general con el usuario usando la IA de Gemini."""
     if not GEMINI_API_KEY: return "Lo siento, el chat no está disponible."
     model = genai.GenerativeModel('gemini-1.5-flash')
@@ -59,8 +60,7 @@ def chat_conversacional_con_ia(mensaje_usuario, historial_chat, reto_actual_solu
     **Reglas:**
     1.  **Sé Contextual:** Responde basándote en el historial.
     2.  **Guía al Usuario:** Explica comandos (`reto python`, `mi perfil`, `pista`, etc.).
-    3.  **Si se Rinde (CRÍTICO):** Si el usuario dice `me rindo` y tienes una solución (`{reto_actual_solucion}`), TU ÚNICA ACCIÓN es dar la solución con una explicación detallada de cómo funciona, sin hacer más preguntas.
-    4.  **Mantente Enfocado:** Rechaza amablemente temas no relacionados con programación.
+    3.  **Mantente Enfocado:** Rechaza amablemente temas no relacionados con programación.
     **Tu respuesta:**
     """
     try:
