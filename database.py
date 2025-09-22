@@ -41,7 +41,8 @@ class Usuario(Base):
 
 # --- FUNCIÓN PARA CREAR LA TABLA SI NO EXISTE ---
 def inicializar_db():
-    Base.metadata.create_all(bind=engine)
+    # LA ÚNICA LÍNEA MODIFICADA: Añadimos checkfirst=True
+    Base.metadata.create_all(bind=engine, checkfirst=True)
 
 @contextmanager
 def get_db_session():
@@ -52,7 +53,7 @@ def get_db_session():
     finally:
         db.close()
 
-# --- FUNCIONES PARA INTERACTUAR CON LA BASE DE DATOS ---
+# --- FUNCIONES PARA INTERACTuar CON LA BASE DE DATOS ---
 
 def obtener_usuario(numero_telefono):
     with get_db_session() as db:
