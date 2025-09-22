@@ -1,68 +1,79 @@
-# database.py
+# database.py (versión para PostgreSQL)
 
-import sqlite3
+import os
 import json
 from datetime import date
+from sqlalchemy import create_engine, Column, String, Integer, Text, update
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
+from contextlib import contextmanager
 
-DB_NAME = "logicbot_v4.db" 
+# La URL se leerá desde una variable de entorno segura en Render
+DATABASE_URL = os.getenv("DATABASE_URL")
 
+# --- CONFIGURACIÓN DE LA CONEXIÓN ---
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# --- MODELO DE LA TABLA (la definición de nuestro usuario) ---
+class Usuario(Base):
+    __tablename__ = "usuarios"
+
+    numero_telefono = Column(String, primary_key=True, index=True)
+    nombre = Column(String)
+    nivel = Column(Integer, default=1)
+    puntos = Column(Integer, default=0)
+    racha_dias = Column(Integer, default=0)
+    ultima_conexion = Column(String, default=lambda: str(date.today()))
+    estado_conversacion = Column(String, default='menu_principal')
+    curso_actual = Column(String, nullable=True)
+    leccion_actual = Column(Integer, default=0)
+    intentos_fallidos = Column(Integer, default=0)
+    tematica_actual = Column(String, nullable=True)
+    tipo_reto_actual = Column(String, nullable=True)
+    reto_actual_enunciado = Column(Text, nullable=True)
+    reto_actual_solucion = Column(Text, nullable=True)
+    reto_actual_tipo = Column(String, nullable=True)
+    reto_actual_pistas = Column(Text, nullable=True)
+    pistas_usadas = Column(Integer, default=0)
+    historial_chat = Column(Text, default='[]')
+
+# --- FUNCIÓN PARA CREAR LA TABLA SI NO EXISTE ---
 def inicializar_db():
-    """Crea la tabla de usuarios si no existe."""
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS usuarios (
-        numero_telefono TEXT PRIMARY KEY,
-        nombre TEXT,
-        nivel INTEGER DEFAULT 1,
-        puntos INTEGER DEFAULT 0,
-        racha_dias INTEGER DEFAULT 0,
-        ultima_conexion TEXT,
-        estado_conversacion TEXT,
-        
-        curso_actual TEXT,
-        leccion_actual INTEGER DEFAULT 0,
-        intentos_fallidos INTEGER DEFAULT 0, -- NUEVA COLUMNA
+    Base.metadata.create_all(bind=engine)
 
-        tematica_actual TEXT,
-        tipo_reto_actual TEXT,
-        reto_actual_enunciado TEXT,
-        reto_actual_solucion TEXT,
-        reto_actual_tipo TEXT,
-        reto_actual_pistas TEXT,
-        pistas_usadas INTEGER DEFAULT 0,
-        historial_chat TEXT
-    )
-    """)
-    conn.commit()
-    conn.close()
+@contextmanager
+def get_db_session():
+    """Manejador de sesión para asegurar que la conexión se cierre siempre."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# --- FUNCIONES PARA INTERACTUAR CON LA BASE DE DATOS ---
 
 def obtener_usuario(numero_telefono):
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM usuarios WHERE numero_telefono = ?", (numero_telefono,))
-    usuario = cursor.fetchone()
-    conn.close()
-    return dict(usuario) if usuario else None
+    with get_db_session() as db:
+        usuario = db.query(Usuario).filter(Usuario.numero_telefono == numero_telefono).first()
+        if usuario:
+            # Convertimos el objeto SQLAlchemy a un diccionario para que el resto del código no se rompa
+            return {c.name: getattr(usuario, c.name) for c in usuario.__table__.columns}
+    return None
 
 def crear_usuario(numero_telefono, nombre):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    hoy = str(date.today())
-    cursor.execute(
-        "INSERT INTO usuarios (numero_telefono, nombre, estado_conversacion, ultima_conexion, historial_chat, racha_dias) VALUES (?, ?, ?, ?, ?, ?)",
-        (numero_telefono, nombre, 'menu_principal', hoy, json.dumps([]), 1)
-    )
-    conn.commit()
-    conn.close()
+    with get_db_session() as db:
+        nuevo_usuario = Usuario(
+            numero_telefono=numero_telefono,
+            nombre=nombre,
+            racha_dias=1
+        )
+        db.add(nuevo_usuario)
+        db.commit()
 
 def actualizar_usuario(numero_telefono, datos):
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    campos = ", ".join([f"{key} = ?" for key in datos.keys()])
-    valores = list(datos.values())
-    valores.append(numero_telefono)
-    cursor.execute(f"UPDATE usuarios SET {campos} WHERE numero_telefono = ?", tuple(valores))
-    conn.commit()
-    conn.close()
+    with get_db_session() as db:
+        stmt = update(Usuario).where(Usuario.numero_telefono == numero_telefono).values(**datos)
+        db.execute(stmt)
+        db.commit()
