@@ -1,6 +1,7 @@
 # main.py
 
 import json
+import os
 from fastapi import FastAPI, Request, Response
 from datetime import date
 
@@ -9,6 +10,14 @@ import message_handler as handler
 from whatsapp_utils import enviar_botones_basicos
 
 app = FastAPI()
+
+@app.on_event("startup")
+async def startup_event():
+    """
+    Esta función se ejecuta una sola vez cuando la aplicación arranca.
+    Llama a la inicialización inteligente de la base de datos.
+    """
+    db.inicializar_db()
 
 @app.post("/webhook")
 async def recibir_mensaje(request: Request):
@@ -57,18 +66,13 @@ async def recibir_mensaje(request: Request):
 
     except Exception as e:
         print(f"Ocurrió un error no manejado: {e}")
-        # Considera registrar el error en un sistema de logging más robusto
     
     return Response(status_code=200)
 
 
-@app.on_event("startup")
-async def startup_event():
-    db.inicializar_db()
-
 @app.get("/webhook")
 async def verificar_webhook(request: Request):
-    VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "micodigosecreto") # Lee desde env
+    VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "micodigosecreto") 
     mode = request.query_params.get("hub.mode")
     token = request.query_params.get("hub.verify_token")
     challenge = request.query_params.get("hub.challenge")

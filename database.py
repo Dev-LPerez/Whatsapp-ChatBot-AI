@@ -1,9 +1,9 @@
-# database.py (versión para PostgreSQL)
+# database.py (versión para PostgreSQL - con inicialización inteligente)
 
 import os
 import json
 from datetime import date
-from sqlalchemy import create_engine, Column, String, Integer, Text, update
+from sqlalchemy import create_engine, Column, String, Integer, Text, update, inspect
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from contextlib import contextmanager
@@ -41,7 +41,17 @@ class Usuario(Base):
 
 # --- FUNCIÓN PARA CREAR LA TABLA SI NO EXISTE ---
 def inicializar_db():
-    Base.metadata.create_all(bind=engine, checkfirst=True)
+    """
+    Verifica si la tabla 'usuarios' existe. Si no, crea todas las tablas.
+    """
+    print("Verificando la base de datos...")
+    inspector = inspect(engine)
+    if not inspector.has_table("usuarios"):
+        print("La tabla 'usuarios' no existe. Creando todas las tablas...")
+        Base.metadata.create_all(bind=engine)
+        print("Tablas creadas exitosamente.")
+    else:
+        print("Las tablas ya existen. No se requiere ninguna acción.")
 
 @contextmanager
 def get_db_session():
@@ -52,7 +62,7 @@ def get_db_session():
     finally:
         db.close()
 
-# --- FUNCIONES PARA INTERACTUAR CON LA BASE DE DATOS ---
+# --- FUNCIONES PARA INTERACTUAR CON LA BASE DE DATOS (sin cambios) ---
 
 def obtener_usuario(numero_telefono):
     with get_db_session() as db:
