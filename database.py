@@ -32,16 +32,15 @@ class Usuario(Base):
     intentos_fallidos = Column(Integer, default=0)
     tematica_actual = Column(String, nullable=True)
     tipo_reto_actual = Column(String, nullable=True)
+    dificultad_reto_actual = Column(String, nullable=True)
     reto_actual_enunciado = Column(Text, nullable=True)
     reto_actual_solucion = Column(Text, nullable=True)
-    reto_actual_tipo = Column(String, nullable=True)
     reto_actual_pistas = Column(Text, nullable=True)
     pistas_usadas = Column(Integer, default=0)
     historial_chat = Column(Text, default='[]')
 
 # --- FUNCIÓN PARA CREAR LA TABLA SI NO EXISTE ---
 def inicializar_db():
-    # LA ÚNICA LÍNEA MODIFICADA: Añadimos checkfirst=True
     Base.metadata.create_all(bind=engine, checkfirst=True)
 
 @contextmanager
@@ -53,13 +52,12 @@ def get_db_session():
     finally:
         db.close()
 
-# --- FUNCIONES PARA INTERACTuar CON LA BASE DE DATOS ---
+# --- FUNCIONES PARA INTERACTUAR CON LA BASE DE DATOS ---
 
 def obtener_usuario(numero_telefono):
     with get_db_session() as db:
         usuario = db.query(Usuario).filter(Usuario.numero_telefono == numero_telefono).first()
         if usuario:
-            # Convertimos el objeto SQLAlchemy a un diccionario para que el resto del código no se rompa
             return {c.name: getattr(usuario, c.name) for c in usuario.__table__.columns}
     return None
 

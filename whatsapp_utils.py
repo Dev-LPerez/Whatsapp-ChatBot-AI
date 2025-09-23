@@ -10,16 +10,23 @@ ID_NUMERO_TELEFONO = os.getenv("ID_NUMERO_TELEFONO")
 
 def responder_mensaje(numero_destinatario, texto_respuesta, historial_actual=[]):
     if not WHATSAPP_TOKEN or not ID_NUMERO_TELEFONO: return
+    
+    # Actualiza el historial de chat en la base de datos
     nuevo_historial = historial_actual + [{"bot": texto_respuesta}]
-    actualizar_usuario(numero_destinatario, {"historial_chat": json.dumps(nuevo_historial[-4:])})
+    actualizar_usuario(numero_destinatario, {"historial_chat": json.dumps(nuevo_historial[-6:])}) # Guardamos un poco más de historial
+    
     url = f"https://graph.facebook.com/v19.0/{ID_NUMERO_TELEFONO}/messages"
     headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
     data = {"messaging_product": "whatsapp", "to": numero_destinatario, "text": {"preview_url": False, "body": texto_respuesta}}
+    
     try:
         response = requests.post(url, headers=headers, json=data)
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         print(f"Error al enviar mensaje a {numero_destinatario}: {e}")
+        if response.text:
+            print(f"Respuesta de la API: {response.text}")
+
 
 def enviar_menu_interactivo(numero_destinatario):
     if not WHATSAPP_TOKEN or not ID_NUMERO_TELEFONO: return
@@ -31,23 +38,30 @@ def enviar_menu_interactivo(numero_destinatario):
         "type": "interactive",
         "interactive": {
             "type": "list",
-            "body": {
-                "text": "¡Hola! Soy tu tutor de IA. Elige una de las siguientes opciones para comenzar."
-            },
+            "header": {"type": "text", "text": "LogicBot Tutor AI"},
+            "body": {"text": "¡Hola! 👋 Elige una de las siguientes opciones para comenzar a aprender y practicar."},
+            "footer": {"text": "Tu progreso se guarda automáticamente"},
             "action": {
                 "button": "Ver Opciones",
                 "sections": [
                     {
-                        "title": "Aprender y Practicar",
+                        "title": "🚀 Rutas de Aprendizaje",
                         "rows": [
-                            {"id": "iniciar_curso_python", "title": "🐍 Empezar Curso"},
-                            {"id": "pedir_reto_aleatorio", "title": "💪 Reto Aleatorio"}
+                            {"id": "iniciar_curso_python", "title": "🐍 Empezar Curso Python"},
+                            {"id": "iniciar_curso_java", "title": "☕ Empezar Curso Java"},
+                            {"id": "iniciar_curso_pseudo", "title": "🧠 Empezar Lógica"},
                         ]
                     },
                     {
-                        "title": "Mi Progreso",
+                        "title": "💪 Práctica Libre",
                         "rows": [
-                            {"id": "ver_mi_perfil", "title": "📊 Ver Mi Perfil"}
+                            {"id": "pedir_reto_aleatorio", "title": "🎲 Reto Aleatorio"}
+                        ]
+                    },
+                    {
+                        "title": "📊 Mi Progreso",
+                        "rows": [
+                            {"id": "ver_mi_perfil", "title": "👤 Ver Mi Perfil"}
                         ]
                     }
                 ]
@@ -59,32 +73,34 @@ def enviar_menu_interactivo(numero_destinatario):
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         print(f"Error al enviar menú a {numero_destinatario}: {e}")
+        if response.text:
+            print(f"Respuesta de la API: {response.text}")
 
-def enviar_botones_basicos(numero_destinatario, texto_principal):
+def enviar_botones_basicos(numero_destinatario, texto_principal, botones):
     """Envía un mensaje con hasta 3 botones de respuesta rápida."""
     if not WHATSAPP_TOKEN or not ID_NUMERO_TELEFONO: return
     url = f"https://graph.facebook.com/v19.0/{ID_NUMERO_TELEFONO}/messages"
     headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
+    
+    # Construir los botones dinámicamente
+    action_buttons = []
+    for boton in botones:
+        action_buttons.append({
+            "type": "reply",
+            "reply": {
+                "id": boton["id"],
+                "title": boton["title"]
+            }
+        })
+
     data = {
         "messaging_product": "whatsapp",
         "to": numero_destinatario,
         "type": "interactive",
         "interactive": {
             "type": "button",
-            "body": {
-                "text": texto_principal
-            },
-            "action": {
-                "buttons": [
-                    {
-                        "type": "reply",
-                        "reply": {
-                            "id": "mostrar_menu",
-                            "title": "Ver Menú Principal"
-                        }
-                    }
-                ]
-            }
+            "body": {"text": texto_principal},
+            "action": {"buttons": action_buttons}
         }
     }
     try:
@@ -92,3 +108,5 @@ def enviar_botones_basicos(numero_destinatario, texto_principal):
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         print(f"Error al enviar botones a {numero_destinatario}: {e}")
+        if response.text:
+            print(f"Respuesta de la API: {response.text}")
