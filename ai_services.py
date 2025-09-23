@@ -10,6 +10,7 @@ if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
 def generar_reto_con_ia(nivel, tipo_reto, dificultad, tematica=None):
+    # Esta función no cambia
     if not GEMINI_API_KEY: return {"error": "IA no configurada."}
     model = genai.GenerativeModel('gemini-1.5-flash')
     prompt = f"""
@@ -26,16 +27,16 @@ def generar_reto_con_ia(nivel, tipo_reto, dificultad, tematica=None):
         return {"error": f"No pude generar el reto. Error de IA: {e}"}
 
 def evaluar_solucion_con_ia(reto_enunciado, solucion_usuario, tipo_reto):
+    # PROMPT MEJORADO: Más estricto para detectar soluciones
     if not GEMINI_API_KEY: return "❌ *INCORRECTO:* La evaluación no está configurada."
     model = genai.GenerativeModel('gemini-1.5-flash')
     prompt = f"""
-    **Contexto:** Eres un tutor de programación que debe diferenciar entre una solución y una pregunta.
+    **Contexto:** Eres un evaluador de código que debe diferenciar entre una solución y una pregunta.
     **Problema a Resolver:** "{reto_enunciado}"
     **Mensaje del Estudiante:** "{solucion_usuario}"
     **Instrucciones:**
-    1.  **Clasifica el Mensaje:** Primero, determina la intención del mensaje. ¿Es un intento de SOLUCIÓN o es una PREGUNTA sobre el tema?
-    2.  **Si es una PREGUNTA:** Tu ÚNICA respuesta debe ser la palabra `[PREGUNTA]`. No respondas nada más.
-    3.  **Si es una SOLUCIÓN:** Evalúa si el código en {tipo_reto} resuelve el problema. Si es correcta, empieza con "✅ *¡CORRECTO!*:". Si es incorrecta, empieza con "❌ *INCORRECTO:*:", seguido de una pista.
+    1.  **Clasifica:** ¿El mensaje contiene un bloque de código que intenta resolver el problema? Si es una pregunta clara como "¿cómo funciona un bucle?" o "¿puedes ayudarme?", responde ÚNICAMENTE con la palabra `[PREGUNTA]`.
+    2.  **Evalúa:** Si el mensaje contiene lo que parece ser una solución en código {tipo_reto}, evalúala. Si es correcta, empieza con "✅ *¡CORRECTO!*:". Si es incorrecta, empieza con "❌ *INCORRECTO:*:", seguido de una pista conceptual (no código).
     """
     try:
         response = model.generate_content(prompt)
@@ -44,28 +45,32 @@ def evaluar_solucion_con_ia(reto_enunciado, solucion_usuario, tipo_reto):
         return f"❌ *INCORRECTO:* Hubo un problema con mi cerebro de IA. Error: {e}"
 
 def chat_conversacional_con_ia(mensaje_usuario, historial_chat, cursos_disponibles, tema_actual=None):
+    # PROMPT MEJORADO: Con reglas estrictas para no dar la solución
     if not GEMINI_API_KEY: return "Lo siento, el chat no está disponible."
     model = genai.GenerativeModel('gemini-1.5-flash')
     temas_python = ", ".join(cursos_disponibles['python']['lecciones'])
     prompt = f"""
-    Eres "LogicBot", un tutor de programación amigable y conversacional.
+    Eres "LogicBot", un tutor de programación. Tu objetivo es guiar al usuario para que resuelva los problemas por sí mismo, no darle la respuesta.
     **Historial:** {historial_chat}
     **Mensaje del usuario:** "{mensaje_usuario}"
-    **Cursos que ofreces:** Python Essentials (Temas: {temas_python}).
     {f"**Tema de la conversación actual:** Estás ayudando al usuario con un reto sobre '{tema_actual}'." if tema_actual else ""}
 
-    **Reglas:**
-    1.  **Sé Contextual:** Si se te da un 'Tema de la conversación actual', tu respuesta DEBE enfocarse en explicar o aclarar dudas sobre ese tema.
-    2.  **Sé Útil:** Si el usuario pregunta qué temas enseñas, responde amablemente listando los temas y anímale a `empezar curso python`.
-    3.  **Guía:** Si el usuario parece perdido y no hay un tema actual, recuérdale los comandos (`empezar curso python`, `reto python`).
+    **REGLA DE ORO (MUY IMPORTANTE):**
+    Bajo NINGUNA circunstancia escribas, completes o corrijas el código del usuario. No des soluciones directas. Tu rol es hacer preguntas y dar pistas conceptuales para que el usuario llegue a la solución por su cuenta.
+    
+    **Otras Reglas:**
+    1.  **Si te piden ayuda:** Responde con una pregunta que le haga pensar. Ejemplo: "¿Qué crees que debería ir dentro de ese bucle para que se detenga?".
+    2.  **Si te piden la solución:** Niégate amablemente. Ejemplo: "¡El objetivo es que lo descubras tú! Sigue intentándolo. Si te sientes muy atascado, siempre puedes escribir `me rindo`."
+    3.  **Sé Contextual:** Si hay un 'Tema de la conversación actual', enfócate en ese tema.
     """
     try:
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        return "No estoy seguro de cómo responder. Intenta con un comando como `empezar curso python`."
+        return "No estoy seguro de cómo responder. Intenta con un comando como `menu`."
 
 def explicar_tema_con_ia(tema):
+    # Esta función no cambia
     if not GEMINI_API_KEY: return "Lo siento, no puedo generar la explicación en este momento."
     model = genai.GenerativeModel('gemini-1.5-flash')
     prompt = f"""
