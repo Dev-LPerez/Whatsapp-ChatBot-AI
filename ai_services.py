@@ -13,7 +13,7 @@ if GEMINI_API_KEY:
 def generar_reto_con_ia(nivel, tipo_reto, dificultad, tematica=None):
     if not GEMINI_API_KEY: return {"error": "IA no configurada."}
     # --- AQUÍ ESTÁ LA CORRECCIÓN ---
-    model = genai.GenerativeModel('gemini-pro') 
+    model = genai.GenerativeModel('gemini-1.5-flash-latest') 
     prompt = f"""
     Eres LogicBot, un tutor de programación divertido. Crea un reto de programación para un estudiante de nivel {nivel}.
     - **Lenguaje/Tema:** {tipo_reto}
@@ -35,7 +35,7 @@ def generar_reto_con_ia(nivel, tipo_reto, dificultad, tematica=None):
 def evaluar_solucion_con_ia(reto_enunciado, solucion_usuario, tipo_reto):
     if not GEMINI_API_KEY: return "❌ *INCORRECTO:* La evaluación no está configurada."
     # --- AQUÍ ESTÁ LA CORRECCIÓN ---
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
     prompt = f"""
     **Contexto:** Eres un evaluador de código que debe diferenciar entre una solución y una pregunta.
     **Problema a Resolver:** "{reto_enunciado}"
@@ -53,7 +53,7 @@ def evaluar_solucion_con_ia(reto_enunciado, solucion_usuario, tipo_reto):
 def chat_conversacional_con_ia(mensaje_usuario, historial_chat, tema_actual=None):
     if not GEMINI_API_KEY: return "Lo siento, el chat no está disponible."
     # --- AQUÍ ESTÁ LA CORRECCIÓN ---
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
     prompt = f"""
     Eres "LogicBot", un tutor de programación amigable y conversacional. Tu objetivo es guiar al usuario para que resuelva los problemas por sí mismo, no darle la respuesta.
     **Historial:** {historial_chat}
@@ -77,7 +77,7 @@ def chat_conversacional_con_ia(mensaje_usuario, historial_chat, tema_actual=None
 def explicar_tema_con_ia(tema):
     if not GEMINI_API_KEY: return "Lo siento, no puedo generar la explicación en este momento."
     # --- AQUÍ ESTÁ LA CORRECCIÓN ---
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
     prompt = f"""
     Eres un profesor de programación excelente, capaz de explicar conceptos complejos de forma sencilla.
     **Tarea:** Explica el concepto de '{tema}' para un principiante.
