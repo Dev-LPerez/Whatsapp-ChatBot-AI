@@ -1,6 +1,7 @@
 # message_handler.py
 
 import json
+import random # <--- ¡AQUÍ ESTÁ LA CORRECCIÓN!
 import database as db
 import ai_services as ai
 from config import CURSOS, UMBRAL_DE_FALLOS, PUNTOS_POR_DIFICULTAD, PUNTOS_PARA_NIVEL_UP, PUNTOS_HABILIDAD_PARA_NIVEL_UP
@@ -114,14 +115,12 @@ def procesar_acierto(numero_remitente, usuario, historial_chat):
     racha = usuario.get("racha_dias", 1)
     puntos_con_bonus = puntos_ganados + racha
     
-    # Actualizar puntos generales
     puntos_actuales_generales = usuario.get("puntos", 0) + puntos_con_bonus
     db.actualizar_usuario(numero_remitente, {"puntos": puntos_actuales_generales})
 
     mensaje_puntos = f"¡Ganaste *{puntos_ganados}* puntos + *{racha}* de bonus por tu racha! Total: *{puntos_con_bonus}* puntos. ✨"
     responder_mensaje(numero_remitente, mensaje_puntos, historial_chat)
 
-    # Actualizar puntos por tema
     tema_actual = usuario.get("tematica_actual")
     if tema_actual:
         progreso_temas = json.loads(usuario.get("progreso_temas", "{}"))
@@ -139,13 +138,11 @@ def procesar_acierto(numero_remitente, usuario, historial_chat):
             
         db.actualizar_usuario(numero_remitente, {"progreso_temas": json.dumps(progreso_temas)})
 
-    # Comprobar si sube de nivel GENERAL
     if puntos_actuales_generales >= PUNTOS_PARA_NIVEL_UP * usuario.get("nivel", 1):
         nuevo_nivel_general = usuario.get("nivel", 1) + 1
         db.actualizar_usuario(numero_remitente, {"nivel": nuevo_nivel_general})
         responder_mensaje(numero_remitente, f"¡FELICIDADES! 🥳 ¡Has alcanzado el **Nivel General {nuevo_nivel_general}**! Sigue así.", historial_chat)
 
-    # Avanzar en el curso o finalizar reto
     if usuario.get("estado_conversacion") == "en_curso":
         avanzar_leccion(numero_remitente, usuario, historial_chat)
     else:
