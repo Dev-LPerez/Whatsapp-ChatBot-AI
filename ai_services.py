@@ -12,7 +12,8 @@ if GEMINI_API_KEY:
 
 def generar_reto_con_ia(nivel, tipo_reto, dificultad, tematica=None):
     if not GEMINI_API_KEY: return {"error": "IA no configurada."}
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # --- AQUÍ ESTÁ LA CORRECCIÓN ---
+    model = genai.GenerativeModel('gemini-pro') 
     prompt = f"""
     Eres LogicBot, un tutor de programación divertido. Crea un reto de programación para un estudiante de nivel {nivel}.
     - **Lenguaje/Tema:** {tipo_reto}
@@ -26,16 +27,15 @@ def generar_reto_con_ia(nivel, tipo_reto, dificultad, tematica=None):
     """
     try:
         response = model.generate_content(prompt)
-        # Limpieza robusta del JSON
         json_text = response.text.strip().replace("```json", "").replace("```", "")
         return json.loads(json_text)
     except (json.JSONDecodeError, Exception) as e:
         return {"error": f"No pude generar el reto. Error de IA: {e}"}
 
 def evaluar_solucion_con_ia(reto_enunciado, solucion_usuario, tipo_reto):
-    # (El prompt actual es muy bueno y cumple RF-14, se mantiene)
     if not GEMINI_API_KEY: return "❌ *INCORRECTO:* La evaluación no está configurada."
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # --- AQUÍ ESTÁ LA CORRECCIÓN ---
+    model = genai.GenerativeModel('gemini-pro')
     prompt = f"""
     **Contexto:** Eres un evaluador de código que debe diferenciar entre una solución y una pregunta.
     **Problema a Resolver:** "{reto_enunciado}"
@@ -51,9 +51,9 @@ def evaluar_solucion_con_ia(reto_enunciado, solucion_usuario, tipo_reto):
         return f"❌ *INCORRECTO:* Hubo un problema con mi cerebro de IA. Error: {e}"
 
 def chat_conversacional_con_ia(mensaje_usuario, historial_chat, tema_actual=None):
-    # (El prompt actual cumple RF-12 y RF-16, se mantiene)
     if not GEMINI_API_KEY: return "Lo siento, el chat no está disponible."
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # --- AQUÍ ESTÁ LA CORRECCIÓN ---
+    model = genai.GenerativeModel('gemini-pro')
     prompt = f"""
     Eres "LogicBot", un tutor de programación amigable y conversacional. Tu objetivo es guiar al usuario para que resuelva los problemas por sí mismo, no darle la respuesta.
     **Historial:** {historial_chat}
@@ -64,8 +64,8 @@ def chat_conversacional_con_ia(mensaje_usuario, historial_chat, tema_actual=None
     Bajo NINGUNA circunstancia escribas, completes o corrijas el código del usuario. No des soluciones directas. Tu rol es hacer preguntas y dar pistas conceptuales para que el usuario llegue a la solución por su cuenta.
     
     **Otras Reglas:**
-    1.  **Si te piden ayuda:** Responde con una pregunta que le haga pensar. Ejemplo: "¿Qué crees que debería ir dentro de ese bucle para que se detenga?".
-    2.  **Si te piden la solución:** Niégate amablemente. Ejemplo: "¡El objetivo es que lo descubras tú! Sigue intentándolo. Si te sientes muy atascado, siempre puedes escribir `me rindo`."
+    1.  **Si te piden ayuda:** Responde con una pregunta que le haga pensar.
+    2.  **Si te piden la solución:** Niégate amablemente.
     3.  **Sé Contextual:** Si hay un 'Tema de la conversación actual', enfócate en ese tema.
     """
     try:
@@ -75,9 +75,9 @@ def chat_conversacional_con_ia(mensaje_usuario, historial_chat, tema_actual=None
         return "No estoy seguro de cómo responder. Intenta con un comando como `menu`."
 
 def explicar_tema_con_ia(tema):
-    # (Sin cambios, cumple su función perfectamente)
     if not GEMINI_API_KEY: return "Lo siento, no puedo generar la explicación en este momento."
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # --- AQUÍ ESTÁ LA CORRECCIÓN ---
+    model = genai.GenerativeModel('gemini-pro')
     prompt = f"""
     Eres un profesor de programación excelente, capaz de explicar conceptos complejos de forma sencilla.
     **Tarea:** Explica el concepto de '{tema}' para un principiante.
