@@ -1,4 +1,4 @@
-# database.py (versión para PostgreSQL - con inicialización inteligente)
+# database.py (versión para PostgreSQL - con progreso por temas)
 
 import os
 import json
@@ -7,21 +7,20 @@ from sqlalchemy import create_engine, Column, String, Integer, Text, update, ins
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from contextlib import contextmanager
+from config import CURSOS # Importamos CURSOS para la inicialización
 
-# La URL se leerá desde una variable de entorno segura en Render
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# --- CONFIGURACIÓN DE LA CONEXIÓN ---
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# --- MODELO DE LA TABLA (la definición de nuestro usuario) ---
 class Usuario(Base):
     __tablename__ = "usuarios"
 
     numero_telefono = Column(String, primary_key=True, index=True)
     nombre = Column(String)
+    # Nivel y puntos generales
     nivel = Column(Integer, default=1)
     puntos = Column(Integer, default=0)
     racha_dias = Column(Integer, default=0)
@@ -30,7 +29,8 @@ class Usuario(Base):
     curso_actual = Column(String, nullable=True)
     leccion_actual = Column(Integer, default=0)
     intentos_fallidos = Column(Integer, default=0)
-    tematica_actual = Column(String, nullable=True)
+    # Novedad: Almacenará la temática actual del reto para actualizar el progreso correcto
+    tematica_actual = Column(String, nullable=True) 
     tipo_reto_actual = Column(String, nullable=True)
     dificultad_reto_actual = Column(String, nullable=True)
     reto_actual_enunciado = Column(Text, nullable=True)
@@ -38,12 +38,10 @@ class Usuario(Base):
     reto_actual_pistas = Column(Text, nullable=True)
     pistas_usadas = Column(Integer, default=0)
     historial_chat = Column(Text, default='[]')
+    # NUEVA COLUMNA: Almacena un JSON con el progreso por tema
+    progreso_temas = Column(Text, default='{}')
 
-# --- FUNCIÓN PARA CREAR LA TABLA SI NO EXISTE ---
 def inicializar_db():
-    """
-    Verifica si la tabla 'usuarios' existe. Si no, crea todas las tablas.
-    """
     print("Verificando la base de datos...")
     inspector = inspect(engine)
     if not inspector.has_table("usuarios"):
@@ -55,14 +53,11 @@ def inicializar_db():
 
 @contextmanager
 def get_db_session():
-    """Manejador de sesión para asegurar que la conexión se cierre siempre."""
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
-
-# --- FUNCIONES PARA INTERACTUAR CON LA BASE DE DATOS (sin cambios) ---
 
 def obtener_usuario(numero_telefono):
     with get_db_session() as db:
@@ -72,11 +67,18 @@ def obtener_usuario(numero_telefono):
     return None
 
 def crear_usuario(numero_telefono, nombre):
+    # Inicializamos el progreso del tema para el curso de Java
+    progreso_inicial = {}
+    java_lessons = CURSOS.get("java", {}).get("lecciones", [])
+    for leccion in java_lessons:
+        progreso_inicial[leccion] = {"puntos": 0, "nivel": 1}
+
     with get_db_session() as db:
         nuevo_usuario = Usuario(
             numero_telefono=numero_telefono,
             nombre=nombre,
-            racha_dias=1
+            racha_dias=1,
+            progreso_temas=json.dumps(progreso_inicial) # Guardamos el JSON inicial
         )
         db.add(nuevo_usuario)
         db.commit()

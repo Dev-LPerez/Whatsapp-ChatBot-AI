@@ -10,21 +10,24 @@ PUNTOS_POR_DIFICULTAD = {
     "Difícil": 30
 }
 
-# Puntos necesarios para subir de nivel
+# Puntos necesarios para subir de nivel GENERAL
 PUNTOS_PARA_NIVEL_UP = 100 
 
-# Definición de cursos y rutas de aprendizaje
+# NUEVO: Puntos necesarios para subir de nivel en una HABILIDAD específica
+PUNTOS_HABILIDAD_PARA_NIVEL_UP = 50
+
+# Definición del curso de Java con lecciones específicas
 CURSOS = {
-    "python": {
-        "nombre": "Python Essentials 🐍",
-        "lecciones": ["Variables y Tipos de Datos", "Operadores Aritméticos", "Condicionales (if/else)", "Bucles (for y while)", "Funciones"]
-    },
     "java": {
         "nombre": "Java Fundamentals ☕",
-        "lecciones": ["Sintaxis Básica", "Variables y Tipos Primitivos", "Operadores", "Clases y Objetos", "Métodos"]
-    },
-    "pseudocodigo": {
-        "nombre": "Lógica con Pseudocódigo 🧠",
-        "lecciones": ["Algoritmos y Diagramas de Flujo", "Variables y Constantes", "Estructuras Condicionales", "Estructuras Repetitivas", "Funciones y Procedimientos"]
+        "lecciones": [
+            "Variables y Tipos Primitivos", 
+            "Operadores Aritméticos y Lógicos", 
+            "Condicionales (if-else, switch)", 
+            "Ciclos (for, while, do-while)", 
+            "Arrays (Arreglos)",
+            "Métodos y Funciones",
+            "Conceptos Básicos de Clases y Objetos"
+        ]
     }
 }

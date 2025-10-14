@@ -11,9 +11,8 @@ ID_NUMERO_TELEFONO = os.getenv("ID_NUMERO_TELEFONO")
 def responder_mensaje(numero_destinatario, texto_respuesta, historial_actual=[]):
     if not WHATSAPP_TOKEN or not ID_NUMERO_TELEFONO: return
     
-    # Actualiza el historial de chat en la base de datos
     nuevo_historial = historial_actual + [{"bot": texto_respuesta}]
-    actualizar_usuario(numero_destinatario, {"historial_chat": json.dumps(nuevo_historial[-6:])}) # Guardamos un poco más de historial
+    actualizar_usuario(numero_destinatario, {"historial_chat": json.dumps(nuevo_historial[-6:])})
     
     url = f"https://graph.facebook.com/v19.0/{ID_NUMERO_TELEFONO}/messages"
     headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
@@ -38,24 +37,22 @@ def enviar_menu_interactivo(numero_destinatario):
         "type": "interactive",
         "interactive": {
             "type": "list",
-            "header": {"type": "text", "text": "LogicBot Tutor AI"},
-            "body": {"text": "¡Hola! 👋 Elige una de las siguientes opciones para comenzar a aprender y practicar."},
+            "header": {"type": "text", "text": "LogicBot - Tutor de Java"},
+            "body": {"text": "¡Hola! 👋 Elige una opción para comenzar a aprender y practicar Java."},
             "footer": {"text": "Tu progreso se guarda automáticamente"},
             "action": {
                 "button": "Ver Opciones",
                 "sections": [
                     {
-                        "title": "🚀 Rutas de Aprendizaje",
+                        "title": "🚀 Ruta de Aprendizaje de Java",
                         "rows": [
-                            {"id": "iniciar_curso_python", "title": "🐍 Empezar Curso Python"},
-                            {"id": "iniciar_curso_java", "title": "☕ Empezar Curso Java"},
-                            {"id": "iniciar_curso_pseudo", "title": "🧠 Empezar Lógica"},
+                            {"id": "iniciar_curso_java", "title": "☕ Empezar Curso de Java"}
                         ]
                     },
                     {
                         "title": "💪 Práctica Libre",
                         "rows": [
-                            {"id": "pedir_reto_aleatorio", "title": "🎲 Reto Aleatorio"}
+                            {"id": "pedir_reto_aleatorio", "title": "🎲 Pedir Reto de Java"}
                         ]
                     },
                     {
@@ -82,7 +79,6 @@ def enviar_botones_basicos(numero_destinatario, texto_principal, botones):
     url = f"https://graph.facebook.com/v19.0/{ID_NUMERO_TELEFONO}/messages"
     headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
     
-    # Construir los botones dinámicamente
     action_buttons = []
     for boton in botones:
         action_buttons.append({
