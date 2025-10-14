@@ -44,7 +44,8 @@ def enviar_menu_interactivo(numero_destinatario):
                 "button": "Ver Opciones",
                 "sections": [
                     {
-                        "title": "🚀 Ruta de Aprendizaje de Java",
+                        # --- AQUÍ ESTÁ LA CORRECCIÓN ---
+                        "title": "🚀 Ruta de Aprendizaje", 
                         "rows": [
                             {"id": "iniciar_curso_java", "title": "☕ Empezar Curso de Java"}
                         ]
