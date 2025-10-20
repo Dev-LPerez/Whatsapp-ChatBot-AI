@@ -2,12 +2,13 @@
 
 import os
 import json
-import google.generativeai as genai
+# --- IMPORTACIÓN CORRECTA PARA LA NUEVA LIBRERÍA ---
+from google import genai
 from config import CURSOS # Importamos los cursos
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# --- CORRECCIÓN: Inicializar el cliente ---
+# --- SINTAXIS CORRECTA: Inicializar el cliente ---
 client = None
 if GEMINI_API_KEY:
     # La configuración de la API key se maneja al crear el cliente
