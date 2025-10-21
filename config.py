@@ -20,14 +20,15 @@ PUNTOS_HABILIDAD_PARA_NIVEL_UP = 50
 CURSOS = {
     "java": {
         "nombre": "Java Fundamentals ☕",
+        # --- ✅ NOMBRES DE LECCIONES ACORTADOS ---
         "lecciones": [
-            "Variables y Tipos Primitivos", 
-            "Operadores Aritméticos y Lógicos", 
-            "Condicionales (if-else, switch)", 
-            "Ciclos (for, while, do-while)", 
+            "Variables y Primitivos", 
+            "Operadores Lógicos", 
+            "Condicionales (if-else)", 
+            "Ciclos (for, while)", 
             "Arrays (Arreglos)",
             "Métodos y Funciones",
-            "Conceptos Básicos de Clases y Objetos"
+            "Clases y Objetos (OOP)"
         ]
     }
 }
