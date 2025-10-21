@@ -1,11 +1,12 @@
 # message_handler.py
 
 import json
-import random # <--- ¡AQUÍ ESTÁ LA CORRECCIÓN!
+import random
 import database as db
 import ai_services as ai
 from config import CURSOS, UMBRAL_DE_FALLOS, PUNTOS_POR_DIFICULTAD, PUNTOS_PARA_NIVEL_UP, PUNTOS_HABILIDAD_PARA_NIVEL_UP
-from whatsapp_utils import responder_mensaje, enviar_menu_interactivo, enviar_botones_basicos
+# --- ✅ LÍNEA MODIFICADA ---
+from whatsapp_utils import responder_mensaje, enviar_menu_interactivo, enviar_botones_basicos, enviar_menu_temas_java
 
 # --- MANEJADORES DE MENSAJES INTERACTIVOS (BOTONES/MENÚS) ---
 
@@ -14,11 +15,22 @@ def handle_interactive_message(id_seleccion, numero_remitente, usuario):
 
     if id_seleccion == 'mostrar_menu':
         enviar_menu_interactivo(numero_remitente)
-    elif id_seleccion == "iniciar_curso_java":
-        iniciar_curso(numero_remitente, usuario, "java")
+    
+    # --- ✅ LÓGICA MODIFICADA ---
+    # Ahora muestra el menú de temas en lugar de iniciar el curso directamente
+    elif id_seleccion == "mostrar_temas_java":
+        enviar_menu_temas_java(numero_remitente)
+    
+    # --- ✅ NUEVA LÓGICA AÑADIDA ---
+    # Maneja la selección de un tema específico del nuevo menú
+    elif id_seleccion.startswith("iniciar_leccion_"):
+        numero_leccion = int(id_seleccion.split("_")[-1])
+        iniciar_curso(numero_remitente, usuario, "java", leccion_especifica=numero_leccion)
+
     elif id_seleccion == "pedir_reto_aleatorio":
         db.actualizar_usuario(numero_remitente, {"estado_conversacion": "eligiendo_dificultad", "tipo_reto_actual": "java"})
         responder_mensaje(numero_remitente, "¿Qué nivel de dificultad prefieres para tu reto de Java? 🤔\n\n1. Fácil 🌱\n2. Intermedio 🔥\n3. Difícil 🤯", historial_chat)
+    
     elif id_seleccion == "ver_mi_perfil":
         mostrar_perfil(numero_remitente, usuario, historial_chat)
 
@@ -54,13 +66,20 @@ def handle_text_message(mensaje_texto, numero_remitente, usuario):
 
 # --- LÓGICA DE ACCIONES ESPECÍFICAS ---
 
-def iniciar_curso(numero_remitente, usuario, curso_key):
+# --- ✅ FUNCIÓN MODIFICADA ---
+def iniciar_curso(numero_remitente, usuario, curso_key, leccion_especifica=None):
     if curso_key not in CURSOS:
         responder_mensaje(numero_remitente, "Lo siento, ese curso no está disponible.", [])
         return
     
     curso = CURSOS[curso_key]
-    leccion_actual = 0
+    # Si se especifica una lección, vamos a ella. Si no, empezamos desde la 0.
+    leccion_actual = leccion_especifica if leccion_especifica is not None else 0
+
+    if leccion_actual >= len(curso['lecciones']):
+        responder_mensaje(numero_remitente, "Lo siento, esa lección no es válida.", [])
+        return
+
     db.actualizar_usuario(numero_remitente, {
         "estado_conversacion": "en_curso",
         "curso_actual": curso_key,
@@ -68,11 +87,14 @@ def iniciar_curso(numero_remitente, usuario, curso_key):
         "intentos_fallidos": 0
     })
     
-    mensaje_inicio = f"¡Excelente! 🎉 Iniciaste la ruta de aprendizaje: *{curso['nombre']}*.\n\nTu primera lección: **{curso['lecciones'][leccion_actual]}**.\n\nGenerando tu primer reto..."
+    tema_seleccionado = curso['lecciones'][leccion_actual]
+    mensaje_inicio = f"¡Perfecto! 🎉 Vamos a practicar con el tema: **{tema_seleccionado}**.\n\nGenerando tu reto..."
     historial_chat = json.loads(usuario.get("historial_chat", "[]"))
     responder_mensaje(numero_remitente, mensaje_inicio, historial_chat)
     
-    generar_y_enviar_reto(numero_remitente, usuario, curso_key, "Fácil", curso['lecciones'][leccion_actual])
+    # Generamos el reto para el tema seleccionado
+    generar_y_enviar_reto(numero_remitente, usuario, curso_key, "Fácil", tema_seleccionado)
+
 
 def handle_seleccion_dificultad(mensaje_texto, numero_remitente, usuario, historial_chat):
     dificultad = None
@@ -143,11 +165,10 @@ def procesar_acierto(numero_remitente, usuario, historial_chat):
         db.actualizar_usuario(numero_remitente, {"nivel": nuevo_nivel_general})
         responder_mensaje(numero_remitente, f"¡FELICIDADES! 🥳 ¡Has alcanzado el **Nivel General {nuevo_nivel_general}**! Sigue así.", historial_chat)
 
-    if usuario.get("estado_conversacion") == "en_curso":
-        avanzar_leccion(numero_remitente, usuario, historial_chat)
-    else:
-        db.actualizar_usuario(numero_remitente, {"estado_conversacion": "menu_principal", "reto_actual_enunciado": None, "reto_actual_solucion": None})
-        enviar_menu_interactivo(numero_remitente)
+    # Al acertar, en lugar de avanzar, volvemos al menú principal
+    db.actualizar_usuario(numero_remitente, {"estado_conversacion": "menu_principal", "reto_actual_enunciado": None, "reto_actual_solucion": None})
+    enviar_menu_interactivo(numero_remitente)
+
 
 def avanzar_leccion(numero_remitente, usuario, historial_chat):
     curso_key = usuario["curso_actual"]
