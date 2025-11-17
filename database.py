@@ -3,7 +3,7 @@
 import os
 import json
 from datetime import date
-from sqlalchemy import create_engine, Column, String, Integer, Text, update, inspect
+from sqlalchemy import create_engine, Column, String, Integer, Text, update, inspect, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from contextlib import contextmanager
@@ -15,6 +15,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
 
 # --- MODELO DE USUARIO ---
 class Usuario(Base):
@@ -40,25 +41,63 @@ class Usuario(Base):
     historial_chat = Column(Text, default='[]')
     progreso_temas = Column(Text, default='{}')
 
-    # Nuevos campos para mejora UX
-    onboarding_completado = Column(Integer, default=0)  # 0=no, 1=sí
-    preferencia_aprendizaje = Column(String, nullable=True)  # 'curso', 'retos', 'ambos'
-    nivel_inicial = Column(String, nullable=True)  # 'principiante', 'intermedio', 'avanzado'
-    logros_desbloqueados = Column(Text, default='[]')  # JSON array de IDs de logros
+    # Nuevos campos (Onboarding y Logros)
+    onboarding_completado = Column(Integer, default=0)
+    preferencia_aprendizaje = Column(String, nullable=True)
+    nivel_inicial = Column(String, nullable=True)
+    logros_desbloqueados = Column(Text, default='[]')
     retos_completados = Column(Integer, default=0)
     retos_sin_pistas = Column(Integer, default=0)
+
 
 # --- FUNCIONES AUXILIARES ---
 
 def inicializar_db():
-    print("Verificando la base de datos...")
+    """
+    Inicializa la DB y realiza migraciones automáticas si faltan columnas.
+    """
+    print("🔍 Verificando esquema de base de datos...")
     inspector = inspect(engine)
+
     if not inspector.has_table("usuarios"):
-        print("La tabla 'usuarios' no existe. Creando todas las tablas...")
+        print("🆕 Creando tabla 'usuarios' desde cero...")
         Base.metadata.create_all(bind=engine)
-        print("Tablas creadas exitosamente.")
+        print("✅ Tablas creadas exitosamente.")
     else:
-        print("Las tablas ya existen. No se requiere ninguna acción.")
+        print("ℹ️ La tabla 'usuarios' ya existe. Verificando columnas faltantes...")
+
+        # Lista de nuevas columnas y sus tipos SQL para migración manual
+        nuevas_columnas = {
+            "onboarding_completado": "INTEGER DEFAULT 0",
+            "preferencia_aprendizaje": "VARCHAR",
+            "nivel_inicial": "VARCHAR",
+            "logros_desbloqueados": "TEXT DEFAULT '[]'",
+            "retos_completados": "INTEGER DEFAULT 0",
+            "retos_sin_pistas": "INTEGER DEFAULT 0"
+        }
+
+        # Obtener columnas actuales en la DB
+        columnas_existentes = [col['name'] for col in inspector.get_columns("usuarios")]
+
+        with engine.connect() as conn:
+            trans = conn.begin()
+            try:
+                cambios_realizados = False
+                for col_nombre, col_def in nuevas_columnas.items():
+                    if col_nombre not in columnas_existentes:
+                        print(f"🛠️ Migrando: Añadiendo columna '{col_nombre}'...")
+                        conn.execute(text(f"ALTER TABLE usuarios ADD COLUMN {col_nombre} {col_def}"))
+                        cambios_realizados = True
+
+                trans.commit()
+                if cambios_realizados:
+                    print("✅ Migración de base de datos completada.")
+                else:
+                    print("✅ Esquema de base de datos al día.")
+            except Exception as e:
+                trans.rollback()
+                print(f"❌ Error durante la migración automática: {e}")
+
 
 @contextmanager
 def get_db_session():
@@ -72,22 +111,17 @@ def get_db_session():
     finally:
         db.close()
 
+
 def obtener_usuario(numero_telefono):
-    # Imprimir log para depuración
-    print(f"🔍 Buscando usuario: '{numero_telefono}' (Tipo: {type(numero_telefono)})")
+    # print(f"🔍 Buscando usuario: '{numero_telefono}'") # Descomentar para debug
     with get_db_session() as db:
-        # Buscamos asegurando que sea string
         usuario = db.query(Usuario).filter(Usuario.numero_telefono == str(numero_telefono)).first()
         if usuario:
-            print("✅ Usuario encontrado en DB")
-            # Convertimos a diccionario para evitar problemas al cerrar la sesión
             return {c.name: getattr(usuario, c.name) for c in usuario.__table__.columns}
-        else:
-            print("❌ Usuario NO encontrado en DB")
     return None
 
+
 def crear_usuario(numero_telefono, nombre):
-    # Doble verificación para evitar condiciones de carrera
     if obtener_usuario(numero_telefono):
         return
 
@@ -99,22 +133,23 @@ def crear_usuario(numero_telefono, nombre):
     try:
         with get_db_session() as db:
             nuevo_usuario = Usuario(
-                numero_telefono=str(numero_telefono), # Aseguramos string
+                numero_telefono=str(numero_telefono),
                 nombre=nombre,
                 racha_dias=1,
                 progreso_temas=json.dumps(progreso_inicial)
             )
             db.add(nuevo_usuario)
-            db.commit() # <--- ¡ESTA LÍNEA ES LA CLAVE! GUARDAR CAMBIOS
+            db.commit()
             print(f"✅ Usuario {numero_telefono} creado y GUARDADO exitosamente")
     except Exception as e:
         print(f"❌ Error CRÍTICO al crear usuario: {e}")
+
 
 def actualizar_usuario(numero_telefono, datos):
     try:
         with get_db_session() as db:
             stmt = update(Usuario).where(Usuario.numero_telefono == str(numero_telefono)).values(**datos)
             db.execute(stmt)
-            db.commit() # <--- ¡ESTA LÍNEA ES LA CLAVE! GUARDAR CAMBIOS
+            db.commit()
     except Exception as e:
         print(f"❌ Error al actualizar usuario: {e}")
