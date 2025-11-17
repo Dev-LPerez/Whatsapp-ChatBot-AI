@@ -70,12 +70,65 @@ async def recibir_mensaje(request: Request):
     return Response(status_code=200)
 
 
+@app.get("/")
+async def root():
+    """
+    Endpoint raíz - Health check básico.
+    Útil para verificar que el servicio está activo.
+    """
+    return {
+        "status": "🟢 online",
+        "service": "LogicBot API",
+        "version": "1.0.0",
+        "message": "El bot está funcionando correctamente"
+    }
+
+@app.get("/health")
+async def health_check():
+    """
+    Endpoint de health check completo.
+    Render y servicios de monitoreo pueden usar esto para verificar el estado.
+    """
+    uptime = None
+    if app_start_time:
+        uptime_delta = datetime.now() - app_start_time
+        uptime = str(uptime_delta).split('.')[0]  # Formato: HH:MM:SS
+
+    # Verificar conexión a la base de datos
+    db_status = "🟢 conectada"
+    try:
+        # Intento rápido de consulta
+        test_user = db.obtener_usuario("health_check_test")
+        db_status = "🟢 conectada"
+    except Exception as e:
+        db_status = f"🔴 error: {str(e)[:50]}"
+
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "uptime": uptime,
+        "environment": "production" if os.getenv('RENDER') else "development",
+        "database": db_status,
+        "services": {
+            "whatsapp_api": "🟢 configurada" if os.getenv('WHATSAPP_TOKEN') else "🔴 no configurada",
+            "gemini_ai": "🟢 configurada" if os.getenv('GEMINI_API_KEY') else "🔴 no configurada"
+        }
+    }
+
 @app.get("/webhook")
 async def verificar_webhook(request: Request):
-    VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "micodigosecreto") 
+    """
+    Verificación de webhook de WhatsApp.
+    Meta lo llama al configurar el webhook por primera vez.
+    """
+    VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "micodigosecreto")
     mode = request.query_params.get("hub.mode")
     token = request.query_params.get("hub.verify_token")
     challenge = request.query_params.get("hub.challenge")
+
     if mode and token and mode == "subscribe" and token == VERIFY_TOKEN:
+        print(f"✅ Webhook verificado correctamente")
         return Response(content=challenge, status_code=200)
+
+    print(f"❌ Verificación de webhook fallida")
     return Response(status_code=403)

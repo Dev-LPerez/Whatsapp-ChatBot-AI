@@ -67,6 +67,9 @@ def obtener_usuario(numero_telefono):
     return None
 
 def crear_usuario(numero_telefono, nombre):
+    """
+    Crea un nuevo usuario en la base de datos con progreso inicial.
+    """
     # Inicializamos el progreso del tema para el curso de Java
     progreso_inicial = {}
     java_lessons = CURSOS.get("java", {}).get("lecciones", [])
@@ -78,10 +81,10 @@ def crear_usuario(numero_telefono, nombre):
             numero_telefono=numero_telefono,
             nombre=nombre,
             racha_dias=1,
-            progreso_temas=json.dumps(progreso_inicial) # Guardamos el JSON inicial
+            progreso_temas=json.dumps(progreso_inicial)
         )
         db.add(nuevo_usuario)
-        db.commit()
+        # El commit se hace automáticamente en get_db_session
 
 def actualizar_usuario(numero_telefono, datos):
     with get_db_session() as db:
