@@ -48,16 +48,25 @@ async def recibir_mensaje(request: Request):
         changes = entry.get('changes', [{}])[0]
         value = changes.get('value', {})
 
-        if not value: return Response(status_code=200)
-
-        # IMPORTANTE: Ignorar webhooks de estado (entrega, lectura, etc.)
-        # Solo procesar mensajes nuevos del usuario
-        if 'statuses' in value:
-            # Webhook de estado (enviado, entregado, leído) - ignorar
+        if not value:
             return Response(status_code=200)
 
-        # Si es un mensaje, procesarlo
-        if 'messages' in value and value['messages']:
+        # IMPORTANTE: Filtrar webhooks de estado (entrega, lectura, etc.)
+        # WhatsApp envía webhooks para: mensajes, estados, errores, etc.
+        # Solo queremos procesar MENSAJES del usuario
+
+        # Si contiene 'statuses', es un webhook de estado → IGNORAR
+        if 'statuses' in value:
+            print("⏭️  Webhook de estado ignorado (sent/delivered/read)")
+            return Response(status_code=200)
+
+        # Si NO contiene 'messages', no es un mensaje del usuario → IGNORAR
+        if 'messages' not in value:
+            print("⏭️  Webhook sin mensajes ignorado")
+            return Response(status_code=200)
+
+        # Si llegamos aquí, es un mensaje real del usuario
+        if value['messages']:
             message_data = value['messages'][0]
             numero_remitente = message_data['from']
             nombre_usuario = value['contacts'][0]['profile']['name']
