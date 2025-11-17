@@ -1,8 +1,8 @@
 # message_handler.py
 
 import json
-import time
 import random
+import time
 import database as db
 import ai_services as ai
 from config import (
@@ -10,7 +10,11 @@ from config import (
     PUNTOS_PARA_NIVEL_UP, PUNTOS_HABILIDAD_PARA_NIVEL_UP,
     NOMBRES_NIVELES
 )
-from whatsapp_utils import responder_mensaje, enviar_menu_interactivo, enviar_botones_basicos, enviar_menu_temas_java
+# --- ✅ IMPORTAMOS LA NUEVA FUNCIÓN enviar_lista_recursos ---
+from whatsapp_utils import (
+    responder_mensaje, enviar_menu_interactivo, enviar_botones_basicos,
+    enviar_menu_temas_java, enviar_lista_recursos
+)
 from utils.formatters import (
     formatear_puntos_ganados, formatear_nivel_up,
     formatear_progreso_tema, formatear_menu_ayuda, generar_barra_progreso
@@ -67,6 +71,21 @@ def handle_interactive_message(id_seleccion, numero_remitente, usuario):
     elif id_seleccion == "ver_logros":
         mostrar_logros_usuario(numero_remitente, usuario)
 
+    # --- ✅ NUEVA LÓGICA: VER COLECCIÓN DE FICHAS ---
+    elif id_seleccion == "ver_coleccion":
+        mostrar_biblioteca_fichas(numero_remitente, usuario, historial_chat)
+
+    elif id_seleccion.startswith("ver_ficha_"):
+        indice_tema = int(id_seleccion.split("_")[-1])
+        if 0 <= indice_tema < len(CURSOS["java"]["lecciones"]):
+            tema = CURSOS["java"]["lecciones"][indice_tema]
+            responder_mensaje(numero_remitente, f"{LIBRO} Buscando la ficha de *{tema}* en tu mochila...",
+                              historial_chat)
+            ficha = ai.generar_cheat_sheet(tema)
+            responder_mensaje(numero_remitente, ficha, historial_chat)
+        else:
+            responder_mensaje(numero_remitente, "No encontré esa ficha.", historial_chat)
+
 
 # --- MANEJADORES DE MENSAJES DE TEXTO POR ESTADO ---
 
@@ -88,6 +107,9 @@ def handle_text_message(mensaje_texto, numero_remitente, usuario):
         return
     if mensaje_lower in ["logros", "mis logros"]:
         mostrar_logros_usuario(numero_remitente, usuario)
+        return
+    if mensaje_lower in ["fichas", "mochila", "recursos"]:  # Nuevo comando
+        mostrar_biblioteca_fichas(numero_remitente, usuario, historial_chat)
         return
     if mensaje_lower in ["ayuda", "pista", "help"]:
         if usuario.get("reto_actual_enunciado"):
@@ -111,9 +133,34 @@ def handle_text_message(mensaje_texto, numero_remitente, usuario):
         responder_mensaje(numero_remitente, respuesta_chat, historial_chat)
 
 
-# --- LÓGICA DE ACCIONES ESPECÍFICAS ---
+# --- ✅ NUEVA FUNCIÓN: MOSTRAR BIBLIOTECA ---
+def mostrar_biblioteca_fichas(numero_remitente, usuario, historial_chat):
+    """Busca qué fichas ha desbloqueado el usuario y muestra el menú."""
+    progreso_temas = json.loads(usuario.get("progreso_temas", "{}"))
+    fichas_disponibles = []
 
-# --- ✅ FUNCIÓN MODIFICADA: Ahora enseña antes de preguntar ---
+    temas_curso = CURSOS["java"]["lecciones"]
+
+    for idx, tema in enumerate(temas_curso):
+        # Si tiene progreso en el tema (nivel > 1), significa que lo ha desbloqueado
+        # O si tiene al menos algunos puntos (nivel 1 pero empezado)
+        # Para ser estrictos con la "recompensa", digamos nivel > 1
+        data_tema = progreso_temas.get(tema, {"nivel": 1})
+        if data_tema["nivel"] > 1:
+            fichas_disponibles.append((idx, tema))
+
+    if not fichas_disponibles:
+        mensaje = f"{TRISTE} Tu mochila está vacía.\n\n"
+        mensaje += "Para desbloquear Fichas Técnicas, completa retos y sube de nivel en los temas.\n"
+        mensaje += f"¡Ve a *{COHETE} Aprender* para conseguir tu primera ficha!"
+        responder_mensaje(numero_remitente, mensaje, historial_chat)
+        enviar_menu_interactivo(numero_remitente)
+    else:
+        enviar_lista_recursos(numero_remitente, fichas_disponibles)
+
+
+# --- LÓGICA DE ACCIONES ESPECÍFICAS (Resto sin cambios mayores) ---
+
 def iniciar_curso(numero_remitente, usuario, curso_key, leccion_especifica=None):
     if curso_key not in CURSOS:
         responder_mensaje(numero_remitente, "Lo siento, ese curso no está disponible.", [])
@@ -136,26 +183,20 @@ def iniciar_curso(numero_remitente, usuario, curso_key, leccion_especifica=None)
     tema_seleccionado = curso['lecciones'][leccion_actual]
     historial_chat = json.loads(usuario.get("historial_chat", "[]"))
 
-    # 1. Mensaje de inicio animado
     mensaje_inicio = f"{COHETE} ¡Excelente elección! Vamos a dominar el tema: *{tema_seleccionado}*."
     responder_mensaje(numero_remitente, mensaje_inicio, historial_chat)
 
-    # 2. Generar y enviar la CLASE/EXPLICACIÓN (Nuevo paso)
     mensaje_cargando = f"{LIBRO} Preparando tu mini-clase sobre {tema_seleccionado}..."
     responder_mensaje(numero_remitente, mensaje_cargando, historial_chat)
 
-    # Pausa breve para naturalidad
     time.sleep(1)
-
     explicacion = ai.generar_introduccion_tema(tema_seleccionado)
     responder_mensaje(numero_remitente, explicacion, historial_chat)
 
-    # 3. Transición al reto
-    time.sleep(2)  # Dar tiempo a leer
+    time.sleep(2)
     mensaje_reto = f"{PRACTICA} Ahora que sabes la teoría, ¡vamos a ponerlo en práctica con un reto!"
     responder_mensaje(numero_remitente, mensaje_reto, historial_chat)
 
-    # 4. Generar el reto
     generar_y_enviar_reto(numero_remitente, usuario, curso_key, "Fácil", tema_seleccionado)
 
 
@@ -221,29 +262,37 @@ def procesar_acierto(numero_remitente, usuario, historial_chat):
     mensaje_puntos = formatear_puntos_ganados(puntos_ganados, racha)
     responder_mensaje(numero_remitente, mensaje_puntos, historial_chat)
 
+    # --- SISTEMA DE COLECCIONABLES (MOCHILA) ---
     tema_actual = usuario.get("tematica_actual")
     if tema_actual:
         progreso_temas = json.loads(usuario.get("progreso_temas", "{}"))
         if tema_actual not in progreso_temas:
             progreso_temas[tema_actual] = {"puntos": 0, "nivel": 1}
 
-        tema_progreso = progreso_temas[tema_actual]
-        tema_progreso["puntos"] += puntos_con_bonus
+        tema_data = progreso_temas[tema_actual]
+        tema_data["puntos"] += puntos_con_bonus
+        puntos_necesarios = PUNTOS_HABILIDAD_PARA_NIVEL_UP * tema_data["nivel"]
 
-        puntos_necesarios = PUNTOS_HABILIDAD_PARA_NIVEL_UP * tema_progreso["nivel"]
         mensaje_tema = formatear_progreso_tema(
-            tema_actual,
-            tema_progreso["puntos"],
-            tema_progreso["nivel"],
-            puntos_necesarios
+            tema_actual, tema_data["puntos"], tema_data["nivel"], puntos_necesarios
         )
         responder_mensaje(numero_remitente, mensaje_tema, historial_chat)
 
-        if tema_progreso["puntos"] >= puntos_necesarios:
-            tema_progreso["nivel"] += 1
-            mensaje_nivel_tema = f"\n{CELEBRACION} ¡Subiste de nivel en *{tema_actual}*!\n"
-            mensaje_nivel_tema += f"Ahora eres *Nivel {tema_progreso['nivel']}* {ESTRELLA}"
-            responder_mensaje(numero_remitente, mensaje_nivel_tema, historial_chat)
+        # VERIFICAR LEVEL UP Y ENTREGAR RECOMPENSA
+        if tema_data["puntos"] >= puntos_necesarios:
+            tema_data["nivel"] += 1
+
+            # 1. Celebración
+            mensaje_recompensa = f"{CELEBRACION} ¡FELICIDADES! Has subido al Nivel {tema_data['nivel']} en *{tema_actual}*.\n\n"
+            mensaje_recompensa += f"🎁 **¡OBJETO DESBLOQUEADO!**\n"
+            mensaje_recompensa += f"Has ganado la **Ficha Técnica de {tema_actual}**.\n"
+            mensaje_recompensa += "Guárdala en tus mensajes destacados para usarla en el futuro."
+            responder_mensaje(numero_remitente, mensaje_recompensa, historial_chat)
+
+            # 2. Entrega del Coleccionable (Cheat Sheet)
+            time.sleep(1)
+            cheat_sheet = ai.generar_cheat_sheet(tema_actual)
+            responder_mensaje(numero_remitente, cheat_sheet, historial_chat)
 
         db.actualizar_usuario(numero_remitente, {"progreso_temas": json.dumps(progreso_temas)})
 
@@ -270,7 +319,7 @@ def procesar_acierto(numero_remitente, usuario, historial_chat):
         {"id": "pedir_reto_aleatorio", "title": f"Otro reto {COHETE}"},
         {"id": "mostrar_menu", "title": f"Ver menú {MENU}"}
     ]
-    enviar_botones_basicos(numero_remitente, mensaje_final, botones)
+    enviar_botones_basicos(numero_remitente, "👇 Opciones disponibles:", botones)
 
 
 def avanzar_leccion(numero_remitente, usuario, historial_chat):

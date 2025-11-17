@@ -87,7 +87,6 @@ def chat_conversacional_con_ia(mensaje_usuario, historial_chat, tema_actual=None
 
 
 def explicar_tema_con_ia(tema):
-    """Genera una explicación detallada bajo demanda (cuando el usuario pide ayuda)."""
     if not client: return "Lo siento, no puedo generar la explicación."
 
     model = 'gemini-2.0-flash'
@@ -103,7 +102,6 @@ def explicar_tema_con_ia(tema):
         return f"Error: {e}"
 
 
-# --- ✅ NUEVA FUNCIÓN AGREGADA ---
 def generar_introduccion_tema(tema):
     """Genera una mini-clase introductoria antes del reto."""
     if not client: return f"Vamos a aprender sobre {tema}."
@@ -127,3 +125,39 @@ def generar_introduccion_tema(tema):
         return response.text
     except Exception as e:
         return f"Comencemos con {tema}. ¡Prepárate!"
+
+
+# --- ✅ NUEVA FUNCIÓN PARA COLECCIONABLES ---
+def generar_cheat_sheet(tema):
+    """Genera una ficha de resumen técnica y útil sobre un tema."""
+    if not client: return f"Ficha de {tema} no disponible por el momento."
+
+    model = 'gemini-2.0-flash'
+    prompt = f"""
+    Genera una "Cheat Sheet" (Hoja de Trucos) técnica y concisa sobre: {tema} en Java.
+    Debe ser un recurso valioso que un programador quiera guardar.
+
+    **Formato Estricto de WhatsApp:**
+    📑 *CHEAT SHEET: {tema.upper()}*
+
+    📌 *Sintaxis:*
+    ```java
+    // Código minimalista y claro aquí
+    ```
+
+    ⚡ *Cuándo usar:*
+    [Explicación en 1 línea]
+
+    ⚠️ *Errores comunes:*
+    [1 punto clave a evitar]
+
+    💡 *Pro-Tip:*
+    [Un truco avanzado o buena práctica]
+
+    Usa emojis técnicos. Sé directo. No saludes al principio ni te despidas al final. Solo entrega el contenido.
+    """
+    try:
+        response = client.models.generate_content(model=model, contents=prompt)
+        return response.text
+    except Exception as e:
+        return f"No pude generar la ficha de colección. Error: {e}"
