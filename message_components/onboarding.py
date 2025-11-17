@@ -9,6 +9,7 @@ from utils.emojis import *
 from whatsapp_utils import enviar_botones_basicos, responder_mensaje, enviar_menu_interactivo
 import database as db
 
+
 def iniciar_onboarding(numero_remitente, nombre_usuario):
     """
     Inicia el flujo de onboarding para nuevos usuarios.
@@ -52,10 +53,12 @@ def handle_onboarding_paso_2(numero_remitente, nivel_seleccionado):
     })
 
     mensaje = f"{PREGUNTA} ¿Qué prefieres hacer?"
+
+    # --- 🛠️ CORRECCIÓN: Títulos acortados (<20 chars) ---
     botones = [
-        {"id": "pref_curso", "title": f"Aprender desde cero {LIBRO}"},
-        {"id": "pref_retos", "title": f"Practicar con retos {PRACTICA}"},
-        {"id": "pref_ambos", "title": f"Ambas cosas {ESTRELLA}"}
+        {"id": "pref_curso", "title": f"Curso Java {LIBRO}"},  # "Curso Java 📚" (13 chars)
+        {"id": "pref_retos", "title": f"Solo Retos {PRACTICA}"},  # "Solo Retos 💪" (13 chars)
+        {"id": "pref_ambos", "title": f"Ambos {ESTRELLA}"}  # "Ambos ⭐" (7 chars)
     ]
     enviar_botones_basicos(numero_remitente, mensaje, botones)
 
