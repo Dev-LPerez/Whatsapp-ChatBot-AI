@@ -1,4 +1,4 @@
-# database.py (versión para PostgreSQL - con progreso por temas)
+# database.py
 
 import os
 import json
@@ -7,20 +7,21 @@ from sqlalchemy import create_engine, Column, String, Integer, Text, update, ins
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from contextlib import contextmanager
-from config import CURSOS # Importamos CURSOS para la inicialización
+from config import CURSOS
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+# Configuración de SQLAlchemy
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+# --- MODELO DE USUARIO ---
 class Usuario(Base):
     __tablename__ = "usuarios"
 
     numero_telefono = Column(String, primary_key=True, index=True)
     nombre = Column(String)
-    # Nivel y puntos generales
     nivel = Column(Integer, default=1)
     puntos = Column(Integer, default=0)
     racha_dias = Column(Integer, default=0)
@@ -29,8 +30,7 @@ class Usuario(Base):
     curso_actual = Column(String, nullable=True)
     leccion_actual = Column(Integer, default=0)
     intentos_fallidos = Column(Integer, default=0)
-    # Novedad: Almacenará la temática actual del reto para actualizar el progreso correcto
-    tematica_actual = Column(String, nullable=True) 
+    tematica_actual = Column(String, nullable=True)
     tipo_reto_actual = Column(String, nullable=True)
     dificultad_reto_actual = Column(String, nullable=True)
     reto_actual_enunciado = Column(Text, nullable=True)
@@ -38,8 +38,9 @@ class Usuario(Base):
     reto_actual_pistas = Column(Text, nullable=True)
     pistas_usadas = Column(Integer, default=0)
     historial_chat = Column(Text, default='[]')
-    # NUEVA COLUMNA: Almacena un JSON con el progreso por tema
     progreso_temas = Column(Text, default='{}')
+
+# --- FUNCIONES AUXILIARES ---
 
 def inicializar_db():
     print("Verificando la base de datos...")
@@ -56,35 +57,32 @@ def get_db_session():
     db = SessionLocal()
     try:
         yield db
+    except Exception as e:
+        print(f"⚠️ Error en sesión de DB, haciendo rollback: {e}")
+        db.rollback()
+        raise
     finally:
         db.close()
 
-# En database.py
-
 def obtener_usuario(numero_telefono):
+    # Imprimir log para depuración
     print(f"🔍 Buscando usuario: '{numero_telefono}' (Tipo: {type(numero_telefono)})")
     with get_db_session() as db:
-        # Aseguramos que buscamos por string
+        # Buscamos asegurando que sea string
         usuario = db.query(Usuario).filter(Usuario.numero_telefono == str(numero_telefono)).first()
         if usuario:
             print("✅ Usuario encontrado en DB")
+            # Convertimos a diccionario para evitar problemas al cerrar la sesión
             return {c.name: getattr(usuario, c.name) for c in usuario.__table__.columns}
         else:
             print("❌ Usuario NO encontrado en DB")
     return None
 
 def crear_usuario(numero_telefono, nombre):
-    """
-    Crea un nuevo usuario en la base de datos con progreso inicial.
-    Maneja duplicados por race conditions.
-    """
-    # Verificar si ya existe (doble verificación)
-    usuario_existente = obtener_usuario(numero_telefono)
-    if usuario_existente:
-        print(f"⚠️  Usuario {numero_telefono} ya existe, omitiendo creación")
+    # Doble verificación para evitar condiciones de carrera
+    if obtener_usuario(numero_telefono):
         return
 
-    # Inicializamos el progreso del tema para el curso de Java
     progreso_inicial = {}
     java_lessons = CURSOS.get("java", {}).get("lecciones", [])
     for leccion in java_lessons:
@@ -93,26 +91,22 @@ def crear_usuario(numero_telefono, nombre):
     try:
         with get_db_session() as db:
             nuevo_usuario = Usuario(
-                numero_telefono=numero_telefono,
+                numero_telefono=str(numero_telefono), # Aseguramos string
                 nombre=nombre,
                 racha_dias=1,
                 progreso_temas=json.dumps(progreso_inicial)
             )
             db.add(nuevo_usuario)
-            # El commit se hace automáticamente en get_db_session
-            print(f"✅ Usuario {numero_telefono} creado exitosamente")
+            db.commit() # <--- ¡ESTA LÍNEA ES LA CLAVE! GUARDAR CAMBIOS
+            print(f"✅ Usuario {numero_telefono} creado y GUARDADO exitosamente")
     except Exception as e:
-        # Si hay error de clave duplicada, es porque otro proceso lo creó
-        if "duplicate key" in str(e).lower() or "unique constraint" in str(e).lower():
-            print(f"⚠️  Usuario {numero_telefono} ya fue creado por otro proceso")
-        else:
-            raise
+        print(f"❌ Error CRÍTICO al crear usuario: {e}")
 
 def actualizar_usuario(numero_telefono, datos):
-    """
-    Actualiza los datos de un usuario existente.
-    """
-    with get_db_session() as db:
-        stmt = update(Usuario).where(Usuario.numero_telefono == numero_telefono).values(**datos)
-        db.execute(stmt)
-        # El commit se hace automáticamente en get_db_session
+    try:
+        with get_db_session() as db:
+            stmt = update(Usuario).where(Usuario.numero_telefono == str(numero_telefono)).values(**datos)
+            db.execute(stmt)
+            db.commit() # <--- ¡ESTA LÍNEA ES LA CLAVE! GUARDAR CAMBIOS
+    except Exception as e:
+        print(f"❌ Error al actualizar usuario: {e}")
