@@ -1,185 +1,137 @@
-# database.py
+# database.py (Versión Firebase Firestore)
 
 import os
 import json
-import time
-import random
 from datetime import date
-from sqlalchemy import create_engine, Column, String, Integer, Text, update, inspect, text
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.exc import IntegrityError, ProgrammingError
-from sqlalchemy.ext.declarative import declarative_base
-from contextlib import contextmanager
+import firebase_admin
+from firebase_admin import credentials, firestore
 from config import CURSOS
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+# --- CONFIGURACIÓN DE FIREBASE ---
 
-# Configuración de SQLAlchemy
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+# Nombre del archivo de credenciales (debe estar en la raíz o configurado en Render)
+CREDENTIALS_FILE = "firebase_credentials.json"
 
+# Inicializar la app de Firebase una sola vez
+if not firebase_admin._apps:
+    try:
+        # Intenta leer del archivo JSON local (Desarrollo)
+        if os.path.exists(CREDENTIALS_FILE):
+            cred = credentials.Certificate(CREDENTIALS_FILE)
+            firebase_admin.initialize_app(cred)
+            print("🔥 Firebase inicializado con archivo local.")
+        else:
+            # Si no hay archivo, intentamos usar las credenciales por defecto de Google Cloud (Producción)
+            # O lanzamos un aviso si no está configurado
+            print("⚠️ No se encontró firebase_credentials.json. Intentando credenciales por defecto...")
+            firebase_admin.initialize_app()
+            print("🔥 Firebase inicializado (Default Credentials).")
+    except Exception as e:
+        print(f"❌ Error inicializando Firebase: {e}")
 
-# --- MODELO DE USUARIO ---
-class Usuario(Base):
-    __tablename__ = "usuarios"
+# Obtener cliente de Firestore
+try:
+    db = firestore.client()
+except Exception:
+    db = None
+    print("❌ No se pudo conectar a Firestore. Verifica las credenciales.")
 
-    numero_telefono = Column(String, primary_key=True, index=True)
-    nombre = Column(String)
-    nivel = Column(Integer, default=1)
-    puntos = Column(Integer, default=0)
-    racha_dias = Column(Integer, default=0)
-    ultima_conexion = Column(String, default=lambda: str(date.today()))
-    estado_conversacion = Column(String, default='menu_principal')
-    curso_actual = Column(String, nullable=True)
-    leccion_actual = Column(Integer, default=0)
-    intentos_fallidos = Column(Integer, default=0)
-    tematica_actual = Column(String, nullable=True)
-    tipo_reto_actual = Column(String, nullable=True)
-    dificultad_reto_actual = Column(String, nullable=True)
-    reto_actual_enunciado = Column(Text, nullable=True)
-    reto_actual_solucion = Column(Text, nullable=True)
-    reto_actual_pistas = Column(Text, nullable=True)
-    pistas_usadas = Column(Integer, default=0)
-    historial_chat = Column(Text, default='[]')
-    progreso_temas = Column(Text, default='{}')
-
-    # Nuevos campos (Onboarding y Logros)
-    onboarding_completado = Column(Integer, default=0)
-    preferencia_aprendizaje = Column(String, nullable=True)
-    nivel_inicial = Column(String, nullable=True)
-    logros_desbloqueados = Column(Text, default='[]')
-    retos_completados = Column(Integer, default=0)
-    retos_sin_pistas = Column(Integer, default=0)
+# Nombre de la colección (equivalente a Tabla)
+COLLECTION_USERS = "usuarios"
 
 
-# --- FUNCIONES AUXILIARES ---
+# --- FUNCIONES DE BASE DE DATOS ---
 
 def inicializar_db():
     """
-    Inicializa la DB y realiza migraciones automáticas.
-    Maneja la concurrencia de múltiples workers con retardos y manejo de errores.
+    En Firebase no hace falta crear tablas.
+    Solo verificamos la conexión.
     """
-    # Pequeña pausa aleatoria para desincronizar los workers y reducir choques
-    time.sleep(random.uniform(0.1, 0.5))
-
-    print("🔍 Verificando esquema de base de datos...")
-
-    try:
-        # Usamos un inspector fresco
-        inspector = inspect(engine)
-
-        # 1. CREACIÓN DE TABLA
-        if not inspector.has_table("usuarios"):
-            print("🆕 Intentando crear tabla 'usuarios'...")
-            try:
-                Base.metadata.create_all(bind=engine)
-                print("✅ Tabla 'usuarios' creada exitosamente.")
-            except (IntegrityError, ProgrammingError) as e:
-                # Si falla porque ya existe (race condition), lo ignoramos
-                if "already exists" in str(e) or "duplicate key" in str(e):
-                    print("⚠️ La tabla fue creada por otro worker concurrentemente. Continuando...")
-                else:
-                    print(f"❌ Error crítico creando tabla: {e}")
-        else:
-            print("ℹ️ La tabla 'usuarios' ya existe.")
-
-        # 2. MIGRACIÓN DE COLUMNAS (Auto-migration)
-        # Lista de columnas requeridas y sus tipos
-        nuevas_columnas = {
-            "onboarding_completado": "INTEGER DEFAULT 0",
-            "preferencia_aprendizaje": "VARCHAR",
-            "nivel_inicial": "VARCHAR",
-            "logros_desbloqueados": "TEXT DEFAULT '[]'",
-            "retos_completados": "INTEGER DEFAULT 0",
-            "retos_sin_pistas": "INTEGER DEFAULT 0"
-        }
-
-        # Refrescamos el inspector para ver columnas actuales
-        inspector = inspect(engine)
-        columnas_existentes = [col['name'] for col in inspector.get_columns("usuarios")]
-
-        with engine.connect() as conn:
-            trans = conn.begin()
-            try:
-                cambios_realizados = False
-                for col_nombre, col_def in nuevas_columnas.items():
-                    if col_nombre not in columnas_existentes:
-                        print(f"🛠️ Migrando: Añadiendo columna '{col_nombre}'...")
-                        try:
-                            conn.execute(text(f"ALTER TABLE usuarios ADD COLUMN {col_nombre} {col_def}"))
-                            cambios_realizados = True
-                        except Exception as e:
-                            # Ignoramos si la columna ya fue creada por otro worker
-                            print(f"⚠️ Aviso migración '{col_nombre}': {e}")
-
-                trans.commit()
-                if cambios_realizados:
-                    print("✅ Migración de base de datos completada.")
-                else:
-                    print("✅ Esquema de base de datos al día.")
-            except Exception as e:
-                trans.rollback()
-                print(f"❌ Error durante la migración automática: {e}")
-
-    except Exception as e:
-        print(f"⚠️ Error general en inicialización (no bloqueante): {e}")
-
-
-@contextmanager
-def get_db_session():
-    db = SessionLocal()
-    try:
-        yield db
-    except Exception as e:
-        print(f"⚠️ Error en sesión de DB, haciendo rollback: {e}")
-        db.rollback()
-        raise
-    finally:
-        db.close()
+    if db:
+        print("✅ Conexión a Firestore activa.")
+    else:
+        print("❌ Error: Firestore no está conectado.")
 
 
 def obtener_usuario(numero_telefono):
-    with get_db_session() as db:
-        usuario = db.query(Usuario).filter(Usuario.numero_telefono == str(numero_telefono)).first()
-        if usuario:
-            return {c.name: getattr(usuario, c.name) for c in usuario.__table__.columns}
-    return None
+    """Obtiene los datos de un usuario por su número de teléfono (ID del documento)."""
+    if not db: return None
+
+    try:
+        doc_ref = db.collection(COLLECTION_USERS).document(str(numero_telefono))
+        doc = doc_ref.get()
+
+        if doc.exists:
+            datos = doc.to_dict()
+            # Aseguramos que el número esté en los datos (aunque sea el ID)
+            datos['numero_telefono'] = str(numero_telefono)
+            return datos
+        else:
+            return None
+    except Exception as e:
+        print(f"Error obteniendo usuario: {e}")
+        return None
 
 
 def crear_usuario(numero_telefono, nombre):
-    # Doble verificación rápida
+    """Crea un nuevo documento de usuario en Firestore."""
+    if not db: return
+
+    # Verificar si ya existe para no sobrescribir (opcional en Firestore, pero buena práctica)
     if obtener_usuario(numero_telefono):
         return
 
+    # Progreso inicial
     progreso_inicial = {}
     java_lessons = CURSOS.get("java", {}).get("lecciones", [])
     for leccion in java_lessons:
         progreso_inicial[leccion] = {"puntos": 0, "nivel": 1}
 
+    # Estructura del documento (JSON)
+    nuevo_usuario = {
+        "numero_telefono": str(numero_telefono),
+        "nombre": nombre,
+        "nivel": 1,
+        "puntos": 0,
+        "racha_dias": 1,
+        "ultima_conexion": str(date.today()),
+        "estado_conversacion": "menu_principal",
+        "curso_actual": None,
+        "leccion_actual": 0,
+        "intentos_fallidos": 0,
+        "tematica_actual": None,
+        "tipo_reto_actual": None,
+        "dificultad_reto_actual": None,
+        "reto_actual_enunciado": None,
+        "reto_actual_solucion": None,
+        "reto_actual_pistas": None,
+        "pistas_usadas": 0,
+        "historial_chat": "[]",  # Guardamos como string JSON por compatibilidad
+        "progreso_temas": json.dumps(progreso_inicial),
+        # Campos nuevos UX
+        "onboarding_completado": 0,
+        "preferencia_aprendizaje": None,
+        "nivel_inicial": None,
+        "logros_desbloqueados": "[]",
+        "retos_completados": 0,
+        "retos_sin_pistas": 0
+    }
+
     try:
-        with get_db_session() as db:
-            nuevo_usuario = Usuario(
-                numero_telefono=str(numero_telefono),
-                nombre=nombre,
-                racha_dias=1,
-                progreso_temas=json.dumps(progreso_inicial)
-            )
-            db.add(nuevo_usuario)
-            db.commit()
-            print(f"✅ Usuario {numero_telefono} creado y GUARDADO exitosamente")
-    except IntegrityError:
-        # Si da error de integridad es porque ya existe (race condition), lo ignoramos
-        print(f"ℹ️ Usuario {numero_telefono} ya existía (concurrencia).")
+        # .set() crea o sobrescribe el documento con el ID específico
+        db.collection(COLLECTION_USERS).document(str(numero_telefono)).set(nuevo_usuario)
+        print(f"✅ Usuario {numero_telefono} creado en Firestore exitosamente")
     except Exception as e:
-        print(f"❌ Error al crear usuario: {e}")
+        print(f"❌ Error al crear usuario en Firestore: {e}")
 
 
 def actualizar_usuario(numero_telefono, datos):
+    """Actualiza campos específicos de un usuario."""
+    if not db: return
+
     try:
-        with get_db_session() as db:
-            stmt = update(Usuario).where(Usuario.numero_telefono == str(numero_telefono)).values(**datos)
-            db.execute(stmt)
-            db.commit()
+        doc_ref = db.collection(COLLECTION_USERS).document(str(numero_telefono))
+        # .update() solo cambia los campos que le pases
+        doc_ref.update(datos)
     except Exception as e:
         print(f"❌ Error al actualizar usuario: {e}")
