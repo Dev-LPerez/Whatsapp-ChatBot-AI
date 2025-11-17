@@ -40,6 +40,14 @@ class Usuario(Base):
     historial_chat = Column(Text, default='[]')
     progreso_temas = Column(Text, default='{}')
 
+    # Nuevos campos para mejora UX
+    onboarding_completado = Column(Integer, default=0)  # 0=no, 1=sí
+    preferencia_aprendizaje = Column(String, nullable=True)  # 'curso', 'retos', 'ambos'
+    nivel_inicial = Column(String, nullable=True)  # 'principiante', 'intermedio', 'avanzado'
+    logros_desbloqueados = Column(Text, default='[]')  # JSON array de IDs de logros
+    retos_completados = Column(Integer, default=0)
+    retos_sin_pistas = Column(Integer, default=0)
+
 # --- FUNCIONES AUXILIARES ---
 
 def inicializar_db():

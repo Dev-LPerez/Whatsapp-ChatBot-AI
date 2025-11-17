@@ -88,10 +88,8 @@ async def recibir_mensaje(request: Request):
                 print(f"👤 Usuario nuevo (o no encontrado) detectado: {numero_remitente}. Registrando...")
                 db.crear_usuario(numero_remitente, nombre_usuario)
 
-                # Mensaje de bienvenida solo para usuarios nuevos
-                bienvenida = f"¡Hola, {nombre_usuario}! 👋 Soy LogicBot, tu tutor de IA personal. ¡Estoy aquí para ayudarte a pensar como un programador! 🚀"
-                botones_inicio = [{"id": "mostrar_menu", "title": "Ver Menú Principal"}]
-                enviar_botones_basicos(numero_remitente, bienvenida, botones_inicio)
+                # Iniciar onboarding personalizado
+                iniciar_onboarding(numero_remitente, nombre_usuario)
                 return Response(status_code=200)
 
             # Actualización de la racha de días (si ya existe el usuario)

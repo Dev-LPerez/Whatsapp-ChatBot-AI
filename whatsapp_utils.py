@@ -39,7 +39,7 @@ def enviar_menu_interactivo(numero_destinatario):
         "interactive": {
             "type": "list",
             "header": {"type": "text", "text": "LogicBot - Tutor de Java"},
-            "body": {"text": "¡Hola! 👋 Elige una opción para comenzar a aprender y practicar Java."},
+            "body": {"text": "¡Hola! 👋 Elige una opción para continuar aprendiendo Java."},
             "footer": {"text": "Tu progreso se guarda automáticamente"},
             "action": {
                 "button": "Ver Opciones",
@@ -47,20 +47,20 @@ def enviar_menu_interactivo(numero_destinatario):
                     {
                         "title": "🚀 Ruta de Aprendizaje", 
                         "rows": [
-                            # Este ID ahora abrirá el menú de temas
-                            {"id": "mostrar_temas_java", "title": "☕ Empezar Curso de Java"}
+                            {"id": "mostrar_temas_java", "title": "☕ Curso de Java", "description": "Aprende paso a paso"}
                         ]
                     },
                     {
                         "title": "💪 Práctica Libre",
                         "rows": [
-                            {"id": "pedir_reto_aleatorio", "title": "🎲 Pedir Reto de Java"}
+                            {"id": "pedir_reto_aleatorio", "title": "🎲 Reto Aleatorio", "description": "Elige dificultad"}
                         ]
                     },
                     {
                         "title": "📊 Mi Progreso",
                         "rows": [
-                            {"id": "ver_mi_perfil", "title": "👤 Ver Mi Perfil"}
+                            {"id": "ver_mi_perfil", "title": "👤 Mi Perfil", "description": "Nivel, puntos y racha"},
+                            {"id": "ver_logros", "title": "🏆 Mis Logros", "description": "Ver achievements"}
                         ]
                     }
                 ]
