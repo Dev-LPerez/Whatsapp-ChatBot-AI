@@ -2,9 +2,12 @@
 
 import os
 import json
+import time
+import random
 from datetime import date
 from sqlalchemy import create_engine, Column, String, Integer, Text, update, inspect, text
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.ext.declarative import declarative_base
 from contextlib import contextmanager
 from config import CURSOS
@@ -54,19 +57,35 @@ class Usuario(Base):
 
 def inicializar_db():
     """
-    Inicializa la DB y realiza migraciones automáticas si faltan columnas.
+    Inicializa la DB y realiza migraciones automáticas.
+    Maneja la concurrencia de múltiples workers con retardos y manejo de errores.
     """
+    # Pequeña pausa aleatoria para desincronizar los workers y reducir choques
+    time.sleep(random.uniform(0.1, 0.5))
+
     print("🔍 Verificando esquema de base de datos...")
-    inspector = inspect(engine)
 
-    if not inspector.has_table("usuarios"):
-        print("🆕 Creando tabla 'usuarios' desde cero...")
-        Base.metadata.create_all(bind=engine)
-        print("✅ Tablas creadas exitosamente.")
-    else:
-        print("ℹ️ La tabla 'usuarios' ya existe. Verificando columnas faltantes...")
+    try:
+        # Usamos un inspector fresco
+        inspector = inspect(engine)
 
-        # Lista de nuevas columnas y sus tipos SQL para migración manual
+        # 1. CREACIÓN DE TABLA
+        if not inspector.has_table("usuarios"):
+            print("🆕 Intentando crear tabla 'usuarios'...")
+            try:
+                Base.metadata.create_all(bind=engine)
+                print("✅ Tabla 'usuarios' creada exitosamente.")
+            except (IntegrityError, ProgrammingError) as e:
+                # Si falla porque ya existe (race condition), lo ignoramos
+                if "already exists" in str(e) or "duplicate key" in str(e):
+                    print("⚠️ La tabla fue creada por otro worker concurrentemente. Continuando...")
+                else:
+                    print(f"❌ Error crítico creando tabla: {e}")
+        else:
+            print("ℹ️ La tabla 'usuarios' ya existe.")
+
+        # 2. MIGRACIÓN DE COLUMNAS (Auto-migration)
+        # Lista de columnas requeridas y sus tipos
         nuevas_columnas = {
             "onboarding_completado": "INTEGER DEFAULT 0",
             "preferencia_aprendizaje": "VARCHAR",
@@ -76,7 +95,8 @@ def inicializar_db():
             "retos_sin_pistas": "INTEGER DEFAULT 0"
         }
 
-        # Obtener columnas actuales en la DB
+        # Refrescamos el inspector para ver columnas actuales
+        inspector = inspect(engine)
         columnas_existentes = [col['name'] for col in inspector.get_columns("usuarios")]
 
         with engine.connect() as conn:
@@ -86,8 +106,12 @@ def inicializar_db():
                 for col_nombre, col_def in nuevas_columnas.items():
                     if col_nombre not in columnas_existentes:
                         print(f"🛠️ Migrando: Añadiendo columna '{col_nombre}'...")
-                        conn.execute(text(f"ALTER TABLE usuarios ADD COLUMN {col_nombre} {col_def}"))
-                        cambios_realizados = True
+                        try:
+                            conn.execute(text(f"ALTER TABLE usuarios ADD COLUMN {col_nombre} {col_def}"))
+                            cambios_realizados = True
+                        except Exception as e:
+                            # Ignoramos si la columna ya fue creada por otro worker
+                            print(f"⚠️ Aviso migración '{col_nombre}': {e}")
 
                 trans.commit()
                 if cambios_realizados:
@@ -97,6 +121,9 @@ def inicializar_db():
             except Exception as e:
                 trans.rollback()
                 print(f"❌ Error durante la migración automática: {e}")
+
+    except Exception as e:
+        print(f"⚠️ Error general en inicialización (no bloqueante): {e}")
 
 
 @contextmanager
@@ -113,7 +140,6 @@ def get_db_session():
 
 
 def obtener_usuario(numero_telefono):
-    # print(f"🔍 Buscando usuario: '{numero_telefono}'") # Descomentar para debug
     with get_db_session() as db:
         usuario = db.query(Usuario).filter(Usuario.numero_telefono == str(numero_telefono)).first()
         if usuario:
@@ -122,6 +148,7 @@ def obtener_usuario(numero_telefono):
 
 
 def crear_usuario(numero_telefono, nombre):
+    # Doble verificación rápida
     if obtener_usuario(numero_telefono):
         return
 
@@ -141,8 +168,11 @@ def crear_usuario(numero_telefono, nombre):
             db.add(nuevo_usuario)
             db.commit()
             print(f"✅ Usuario {numero_telefono} creado y GUARDADO exitosamente")
+    except IntegrityError:
+        # Si da error de integridad es porque ya existe (race condition), lo ignoramos
+        print(f"ℹ️ Usuario {numero_telefono} ya existía (concurrencia).")
     except Exception as e:
-        print(f"❌ Error CRÍTICO al crear usuario: {e}")
+        print(f"❌ Error al crear usuario: {e}")
 
 
 def actualizar_usuario(numero_telefono, datos):
