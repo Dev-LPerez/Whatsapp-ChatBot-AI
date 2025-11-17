@@ -1,6 +1,7 @@
 # message_handler.py
 
 import json
+import time
 import random
 import database as db
 import ai_services as ai
@@ -12,8 +13,7 @@ from config import (
 from whatsapp_utils import responder_mensaje, enviar_menu_interactivo, enviar_botones_basicos, enviar_menu_temas_java
 from utils.formatters import (
     formatear_puntos_ganados, formatear_nivel_up,
-    formatear_progreso_tema, formatear_error_con_pista,
-    formatear_menu_ayuda, generar_barra_progreso
+    formatear_progreso_tema, formatear_menu_ayuda, generar_barra_progreso
 )
 from utils.emojis import *
 from message_components import (
@@ -113,6 +113,7 @@ def handle_text_message(mensaje_texto, numero_remitente, usuario):
 
 # --- LÓGICA DE ACCIONES ESPECÍFICAS ---
 
+# --- ✅ FUNCIÓN MODIFICADA: Ahora enseña antes de preguntar ---
 def iniciar_curso(numero_remitente, usuario, curso_key, leccion_especifica=None):
     if curso_key not in CURSOS:
         responder_mensaje(numero_remitente, "Lo siento, ese curso no está disponible.", [])
@@ -133,10 +134,28 @@ def iniciar_curso(numero_remitente, usuario, curso_key, leccion_especifica=None)
     })
 
     tema_seleccionado = curso['lecciones'][leccion_actual]
-    mensaje_inicio = f"¡Perfecto! 🎉 Vamos a practicar con el tema: **{tema_seleccionado}**.\n\nGenerando tu reto..."
     historial_chat = json.loads(usuario.get("historial_chat", "[]"))
+
+    # 1. Mensaje de inicio animado
+    mensaje_inicio = f"{COHETE} ¡Excelente elección! Vamos a dominar el tema: *{tema_seleccionado}*."
     responder_mensaje(numero_remitente, mensaje_inicio, historial_chat)
 
+    # 2. Generar y enviar la CLASE/EXPLICACIÓN (Nuevo paso)
+    mensaje_cargando = f"{LIBRO} Preparando tu mini-clase sobre {tema_seleccionado}..."
+    responder_mensaje(numero_remitente, mensaje_cargando, historial_chat)
+
+    # Pausa breve para naturalidad
+    time.sleep(1)
+
+    explicacion = ai.generar_introduccion_tema(tema_seleccionado)
+    responder_mensaje(numero_remitente, explicacion, historial_chat)
+
+    # 3. Transición al reto
+    time.sleep(2)  # Dar tiempo a leer
+    mensaje_reto = f"{PRACTICA} Ahora que sabes la teoría, ¡vamos a ponerlo en práctica con un reto!"
+    responder_mensaje(numero_remitente, mensaje_reto, historial_chat)
+
+    # 4. Generar el reto
     generar_y_enviar_reto(numero_remitente, usuario, curso_key, "Fácil", tema_seleccionado)
 
 
@@ -188,7 +207,6 @@ def procesar_acierto(numero_remitente, usuario, historial_chat):
 
     puntos_actuales_generales = usuario.get("puntos", 0) + puntos_con_bonus
     retos_completados = usuario.get("retos_completados", 0) + 1
-
     pistas_usadas = usuario.get("pistas_usadas", 0)
     retos_sin_pistas = usuario.get("retos_sin_pistas", 0)
     if pistas_usadas == 0:
@@ -206,7 +224,6 @@ def procesar_acierto(numero_remitente, usuario, historial_chat):
     tema_actual = usuario.get("tematica_actual")
     if tema_actual:
         progreso_temas = json.loads(usuario.get("progreso_temas", "{}"))
-
         if tema_actual not in progreso_temas:
             progreso_temas[tema_actual] = {"puntos": 0, "nivel": 1}
 
@@ -234,9 +251,7 @@ def procesar_acierto(numero_remitente, usuario, historial_chat):
     if puntos_actuales_generales >= PUNTOS_PARA_NIVEL_UP * nivel_actual:
         nuevo_nivel_general = nivel_actual + 1
         nombre_nivel = NOMBRES_NIVELES.get(nuevo_nivel_general, f"Nivel {nuevo_nivel_general}")
-
         db.actualizar_usuario(numero_remitente, {"nivel": nuevo_nivel_general})
-
         mensaje_nivel_up = formatear_nivel_up(nuevo_nivel_general, nombre_nivel)
         responder_mensaje(numero_remitente, mensaje_nivel_up, historial_chat)
 
@@ -360,7 +375,6 @@ def mostrar_perfil(numero_remitente, usuario, historial_chat):
         mensaje_no_progreso = f"\n{IDEA} Aún no has practicado ningún tema.\n¡Empieza un reto para ver tu progreso!"
         responder_mensaje(numero_remitente, mensaje_no_progreso, historial_chat)
 
-    # --- ✅ CORRECCIÓN APLICADA AQUÍ (Se agregó texto al botón) ---
     botones = [
         {"id": "ver_logros", "title": f"Ver logros {LOGRO}"},
         {"id": "mostrar_menu", "title": f"Volver {MENU}"}
