@@ -50,6 +50,12 @@ async def recibir_mensaje(request: Request):
 
         if not value: return Response(status_code=200)
 
+        # IMPORTANTE: Ignorar webhooks de estado (entrega, lectura, etc.)
+        # Solo procesar mensajes nuevos del usuario
+        if 'statuses' in value:
+            # Webhook de estado (enviado, entregado, leído) - ignorar
+            return Response(status_code=200)
+
         # Si es un mensaje, procesarlo
         if 'messages' in value and value['messages']:
             message_data = value['messages'][0]

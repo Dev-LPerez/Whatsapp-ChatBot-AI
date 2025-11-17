@@ -69,25 +69,43 @@ def obtener_usuario(numero_telefono):
 def crear_usuario(numero_telefono, nombre):
     """
     Crea un nuevo usuario en la base de datos con progreso inicial.
+    Maneja duplicados por race conditions.
     """
+    # Verificar si ya existe (doble verificación)
+    usuario_existente = obtener_usuario(numero_telefono)
+    if usuario_existente:
+        print(f"⚠️  Usuario {numero_telefono} ya existe, omitiendo creación")
+        return
+
     # Inicializamos el progreso del tema para el curso de Java
     progreso_inicial = {}
     java_lessons = CURSOS.get("java", {}).get("lecciones", [])
     for leccion in java_lessons:
         progreso_inicial[leccion] = {"puntos": 0, "nivel": 1}
 
-    with get_db_session() as db:
-        nuevo_usuario = Usuario(
-            numero_telefono=numero_telefono,
-            nombre=nombre,
-            racha_dias=1,
-            progreso_temas=json.dumps(progreso_inicial)
-        )
-        db.add(nuevo_usuario)
-        # El commit se hace automáticamente en get_db_session
+    try:
+        with get_db_session() as db:
+            nuevo_usuario = Usuario(
+                numero_telefono=numero_telefono,
+                nombre=nombre,
+                racha_dias=1,
+                progreso_temas=json.dumps(progreso_inicial)
+            )
+            db.add(nuevo_usuario)
+            # El commit se hace automáticamente en get_db_session
+            print(f"✅ Usuario {numero_telefono} creado exitosamente")
+    except Exception as e:
+        # Si hay error de clave duplicada, es porque otro proceso lo creó
+        if "duplicate key" in str(e).lower() or "unique constraint" in str(e).lower():
+            print(f"⚠️  Usuario {numero_telefono} ya fue creado por otro proceso")
+        else:
+            raise
 
 def actualizar_usuario(numero_telefono, datos):
+    """
+    Actualiza los datos de un usuario existente.
+    """
     with get_db_session() as db:
         stmt = update(Usuario).where(Usuario.numero_telefono == numero_telefono).values(**datos)
         db.execute(stmt)
-        db.commit()
+        # El commit se hace automáticamente en get_db_session
