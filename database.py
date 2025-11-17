@@ -59,11 +59,18 @@ def get_db_session():
     finally:
         db.close()
 
+# En database.py
+
 def obtener_usuario(numero_telefono):
+    print(f"🔍 Buscando usuario: '{numero_telefono}' (Tipo: {type(numero_telefono)})")
     with get_db_session() as db:
-        usuario = db.query(Usuario).filter(Usuario.numero_telefono == numero_telefono).first()
+        # Aseguramos que buscamos por string
+        usuario = db.query(Usuario).filter(Usuario.numero_telefono == str(numero_telefono)).first()
         if usuario:
+            print("✅ Usuario encontrado en DB")
             return {c.name: getattr(usuario, c.name) for c in usuario.__table__.columns}
+        else:
+            print("❌ Usuario NO encontrado en DB")
     return None
 
 def crear_usuario(numero_telefono, nombre):
