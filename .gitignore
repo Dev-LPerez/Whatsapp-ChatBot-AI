@@ -175,6 +175,10 @@ $RECYCLE.BIN/
 .env.local
 .env.production
 
+# Credenciales de Firebase (¡NUNCA SUBIR!)
+firebase_credentials.json
+*firebase_credentials*.json
+
 # Base de datos local
 *.db
 *.sqlite

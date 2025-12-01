@@ -10,7 +10,6 @@ from config import (
     PUNTOS_PARA_NIVEL_UP, PUNTOS_HABILIDAD_PARA_NIVEL_UP,
     NOMBRES_NIVELES
 )
-# --- ✅ IMPORTAMOS LA NUEVA FUNCIÓN enviar_lista_recursos ---
 from whatsapp_utils import (
     responder_mensaje, enviar_menu_interactivo, enviar_botones_basicos,
     enviar_menu_temas_java, enviar_lista_recursos
@@ -26,8 +25,6 @@ from message_components import (
     verificar_y_otorgar_logros, mostrar_logros_usuario
 )
 
-
-# --- MANEJADORES DE MENSAJES INTERACTIVOS (BOTONES/MENÚS) ---
 
 def handle_interactive_message(id_seleccion, numero_remitente, usuario):
     historial_chat = json.loads(usuario.get("historial_chat", "[]"))
@@ -71,7 +68,6 @@ def handle_interactive_message(id_seleccion, numero_remitente, usuario):
     elif id_seleccion == "ver_logros":
         mostrar_logros_usuario(numero_remitente, usuario)
 
-    # --- ✅ NUEVA LÓGICA: VER COLECCIÓN DE FICHAS ---
     elif id_seleccion == "ver_coleccion":
         mostrar_biblioteca_fichas(numero_remitente, usuario, historial_chat)
 
@@ -87,13 +83,26 @@ def handle_interactive_message(id_seleccion, numero_remitente, usuario):
             responder_mensaje(numero_remitente, "No encontré esa ficha.", historial_chat)
 
 
-# --- MANEJADORES DE MENSAJES DE TEXTO POR ESTADO ---
-
 def handle_text_message(mensaje_texto, numero_remitente, usuario):
     historial_chat = json.loads(usuario.get("historial_chat", "[]"))
     historial_chat.append({"usuario": mensaje_texto})
     estado = usuario.get("estado_conversacion", "menu_principal")
-    mensaje_lower = mensaje_texto.lower()
+    mensaje_lower = mensaje_texto.lower().strip()
+
+    # --- COMANDO DE VINCULACIÓN A CLASE ---
+    if mensaje_lower.startswith("unirse"):
+        partes = mensaje_texto.split()
+        if len(partes) > 1:
+            token = partes[1].upper().strip()
+            # Llamamos a la nueva función de BD
+            exito = db.vincular_alumno_a_clase(numero_remitente, token)
+            if exito:
+                responder_mensaje(numero_remitente, f"✅ ¡Conectado! Ahora estás vinculado a la clase *{token}*.\nTu profesor podrá ver tu progreso.", historial_chat)
+            else:
+                responder_mensaje(numero_remitente, "❌ Hubo un error al unirte. Intenta de nuevo.", historial_chat)
+        else:
+            responder_mensaje(numero_remitente, f"⚠️ Formato incorrecto.\nUsa: *unirse CÓDIGO*\nEjemplo: unirse PROG-2025-A", historial_chat)
+        return
 
     # Comandos Globales
     if mensaje_lower in ["menu", "menú"]:
@@ -108,7 +117,7 @@ def handle_text_message(mensaje_texto, numero_remitente, usuario):
     if mensaje_lower in ["logros", "mis logros"]:
         mostrar_logros_usuario(numero_remitente, usuario)
         return
-    if mensaje_lower in ["fichas", "mochila", "recursos"]:  # Nuevo comando
+    if mensaje_lower in ["fichas", "mochila", "recursos"]:
         mostrar_biblioteca_fichas(numero_remitente, usuario, historial_chat)
         return
     if mensaje_lower in ["ayuda", "pista", "help"]:
@@ -133,18 +142,13 @@ def handle_text_message(mensaje_texto, numero_remitente, usuario):
         responder_mensaje(numero_remitente, respuesta_chat, historial_chat)
 
 
-# --- ✅ NUEVA FUNCIÓN: MOSTRAR BIBLIOTECA ---
 def mostrar_biblioteca_fichas(numero_remitente, usuario, historial_chat):
-    """Busca qué fichas ha desbloqueado el usuario y muestra el menú."""
     progreso_temas = json.loads(usuario.get("progreso_temas", "{}"))
     fichas_disponibles = []
 
     temas_curso = CURSOS["java"]["lecciones"]
 
     for idx, tema in enumerate(temas_curso):
-        # Si tiene progreso en el tema (nivel > 1), significa que lo ha desbloqueado
-        # O si tiene al menos algunos puntos (nivel 1 pero empezado)
-        # Para ser estrictos con la "recompensa", digamos nivel > 1
         data_tema = progreso_temas.get(tema, {"nivel": 1})
         if data_tema["nivel"] > 1:
             fichas_disponibles.append((idx, tema))
@@ -158,8 +162,6 @@ def mostrar_biblioteca_fichas(numero_remitente, usuario, historial_chat):
     else:
         enviar_lista_recursos(numero_remitente, fichas_disponibles)
 
-
-# --- LÓGICA DE ACCIONES ESPECÍFICAS (Resto sin cambios mayores) ---
 
 def iniciar_curso(numero_remitente, usuario, curso_key, leccion_especifica=None):
     if curso_key not in CURSOS:
@@ -262,7 +264,6 @@ def procesar_acierto(numero_remitente, usuario, historial_chat):
     mensaje_puntos = formatear_puntos_ganados(puntos_ganados, racha)
     responder_mensaje(numero_remitente, mensaje_puntos, historial_chat)
 
-    # --- SISTEMA DE COLECCIONABLES (MOCHILA) ---
     tema_actual = usuario.get("tematica_actual")
     if tema_actual:
         progreso_temas = json.loads(usuario.get("progreso_temas", "{}"))
@@ -278,18 +279,14 @@ def procesar_acierto(numero_remitente, usuario, historial_chat):
         )
         responder_mensaje(numero_remitente, mensaje_tema, historial_chat)
 
-        # VERIFICAR LEVEL UP Y ENTREGAR RECOMPENSA
         if tema_data["puntos"] >= puntos_necesarios:
             tema_data["nivel"] += 1
-
-            # 1. Celebración
             mensaje_recompensa = f"{CELEBRACION} ¡FELICIDADES! Has subido al Nivel {tema_data['nivel']} en *{tema_actual}*.\n\n"
             mensaje_recompensa += f"🎁 **¡OBJETO DESBLOQUEADO!**\n"
             mensaje_recompensa += f"Has ganado la **Ficha Técnica de {tema_actual}**.\n"
             mensaje_recompensa += "Guárdala en tus mensajes destacados para usarla en el futuro."
             responder_mensaje(numero_remitente, mensaje_recompensa, historial_chat)
 
-            # 2. Entrega del Coleccionable (Cheat Sheet)
             time.sleep(1)
             cheat_sheet = ai.generar_cheat_sheet(tema_actual)
             responder_mensaje(numero_remitente, cheat_sheet, historial_chat)
