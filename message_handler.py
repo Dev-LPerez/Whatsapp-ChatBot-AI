@@ -122,8 +122,31 @@ def handle_text_message(mensaje_texto, numero_remitente, usuario):
         return
     if mensaje_lower in ["ayuda", "pista", "help"]:
         if usuario.get("reto_actual_enunciado"):
-            mensaje_ayuda = f"{IDEA} *Pista:*\n\nRevisa bien la lógica del problema. "
-            mensaje_ayuda += "¿Qué tipo de dato necesitas? ¿Qué operaciones son necesarias?"
+            # 1. Recuperar las pistas específicas de este reto y el contador actual
+            pistas_guardadas = json.loads(usuario.get("reto_actual_pistas", "[]"))
+            pistas_usadas = usuario.get("pistas_usadas", 0)
+
+            # 2. Verificar si quedan pistas disponibles
+            if pistas_usadas < len(pistas_guardadas):
+                pista_a_mostrar = pistas_guardadas[pistas_usadas]
+
+                # --- CORRECCIÓN CRÍTICA ---
+                # Actualizamos el contador en la base de datos
+                db.actualizar_usuario(numero_remitente, {
+                    "pistas_usadas": pistas_usadas + 1
+                })
+                # --------------------------
+
+                mensaje_ayuda = f"{IDEA} *Pista #{pistas_usadas + 1}:*\n\n{pista_a_mostrar}"
+
+                # Opcional: Advertencia si es la última pista
+                if pistas_usadas + 1 == len(pistas_guardadas):
+                    mensaje_ayuda += "\n\n⚠️ *¡Ojo!* Esta es tu última pista."
+
+            else:
+                # Si ya agotó las pistas (usualmente son 3)
+                mensaje_ayuda = f"{CANDADO} Ya has utilizado todas las pistas disponibles para este reto.\n¡Confío en que puedes resolverlo! {PRACTICA}"
+
             responder_mensaje(numero_remitente, mensaje_ayuda, historial_chat)
         else:
             mensaje_ayuda = formatear_menu_ayuda()
@@ -131,7 +154,14 @@ def handle_text_message(mensaje_texto, numero_remitente, usuario):
         return
 
     # Lógica por Estado Conversacional
-    if estado == "eligiendo_dificultad":
+    # --- NUEVOS ESTADOS FASE 3 ---
+    if estado == "esperando_defensa":
+        handle_respuesta_defensa(mensaje_texto, numero_remitente, usuario, historial_chat)
+    elif estado == "resolviendo_debug":
+        # Reutilizamos la lógica de solución pero sabiendo que es debug
+        handle_solucion_reto(mensaje_texto, numero_remitente, usuario, historial_chat, es_debug=True)
+    # --- ESTADOS EXISTENTES ---
+    elif estado == "eligiendo_dificultad":
         handle_seleccion_dificultad(mensaje_texto, numero_remitente, usuario, historial_chat)
     elif estado in ["en_curso", "resolviendo_reto"]:
         handle_solucion_reto(mensaje_texto, numero_remitente, usuario, historial_chat)
@@ -224,9 +254,11 @@ def handle_seleccion_dificultad(mensaje_texto, numero_remitente, usuario, histor
         responder_mensaje(numero_remitente, respuesta_chat, historial_chat)
 
 
-def handle_solucion_reto(mensaje_texto, numero_remitente, usuario, historial_chat):
-    tipo_reto = usuario.get("curso_actual") or usuario.get("tipo_reto_actual")
-    feedback = ai.evaluar_solucion_con_ia(usuario["reto_actual_enunciado"], mensaje_texto, tipo_reto)
+def handle_solucion_reto(mensaje_texto, numero_remitente, usuario, historial_chat, es_debug=False):
+    enunciado = usuario.get("reto_actual_enunciado")
+    tipo_reto = "depuración de código" if es_debug else (usuario.get("curso_actual") or usuario.get("tipo_reto_actual"))
+
+    feedback = ai.evaluar_solucion_con_ia(enunciado, mensaje_texto, tipo_reto)
 
     if "[PREGUNTA]" in feedback:
         tema_actual = "programación en Java"
@@ -236,7 +268,27 @@ def handle_solucion_reto(mensaje_texto, numero_remitente, usuario, historial_cha
         responder_mensaje(numero_remitente, respuesta_conversacional, historial_chat)
     elif feedback.strip().upper().startswith("✅"):
         responder_mensaje(numero_remitente, feedback, historial_chat)
-        procesar_acierto(numero_remitente, usuario, historial_chat)
+
+        # --- NUEVO: TRIGGER DE DEFENSA SOCRÁTICA ---
+        # Si el reto fue "Fácil" o es "Debug", pasamos directo.
+        # Si es "Intermedio/Difícil", activamos defensa el 50% de las veces.
+        dificultad = usuario.get("dificultad_reto_actual", "Fácil")
+        requiere_defensa = dificultad != "Fácil" and random.random() < 0.5 and not es_debug
+
+        if requiere_defensa:
+            pregunta_defensa = ai.generar_pregunta_defensa(enunciado, mensaje_texto)
+
+            db.actualizar_usuario(numero_remitente, {
+                "estado_conversacion": "esperando_defensa",
+                "pregunta_defensa_actual": pregunta_defensa
+            })
+
+            time.sleep(1)
+            msg_defensa = f"🧐 *Un momento...* Para validar tu solución:\n\n{pregunta_defensa}"
+            responder_mensaje(numero_remitente, msg_defensa, historial_chat)
+        else:
+            # Si no requiere defensa, damos los puntos directamente
+            procesar_acierto(numero_remitente, usuario, historial_chat)
     else:
         responder_mensaje(numero_remitente, feedback, historial_chat)
         procesar_fallo(numero_remitente, usuario, historial_chat)
@@ -429,21 +481,60 @@ def mostrar_perfil(numero_remitente, usuario, historial_chat):
 
 
 def generar_y_enviar_reto(numero_remitente, usuario, tipo_reto, dificultad, tematica=None):
-    reto = ai.generar_reto_con_ia(usuario['nivel'], tipo_reto, dificultad, tematica)
+    # 30% de probabilidad de que sea un Reto de Depuración (si no es el primer reto)
+    es_debug = random.random() < 0.3 and usuario.get("retos_completados", 0) > 2
+
     historial_chat = json.loads(usuario.get("historial_chat", "[]"))
 
+    if es_debug:
+        reto = ai.generar_reto_depuracion(usuario['nivel'], tematica or "Java General")
+        nuevo_estado = "resolviendo_debug"
+        tipo_msg = f"🕵️ *RETO DE DEPURACIÓN*"
+    else:
+        reto = ai.generar_reto_con_ia(usuario['nivel'], tipo_reto, dificultad, tematica)
+        nuevo_estado = "resolviendo_reto" if not usuario.get("curso_actual") else "en_curso"
+        tipo_msg = f"{RETO} *NUEVO RETO ({dificultad})*"
+
     if "error" in reto:
-        responder_mensaje(numero_remitente, reto["error"], historial_chat)
+        responder_mensaje(numero_remitente, "Ups, la IA se tomó un descanso. Intenta de nuevo.", historial_chat)
         db.actualizar_usuario(numero_remitente, {"estado_conversacion": "menu_principal"})
     else:
+        # Guardamos el reto
         db.actualizar_usuario(numero_remitente, {
-            "estado_conversacion": "resolviendo_reto" if not usuario.get("curso_actual") else "en_curso",
+            "estado_conversacion": nuevo_estado,
             "reto_actual_enunciado": reto["enunciado"],
             "reto_actual_solucion": reto["solucion_ideal"],
             "reto_actual_pistas": json.dumps(reto["pistas"]),
             "pistas_usadas": 0,
-            "tipo_reto_actual": tipo_reto,
+            "tipo_reto_actual": "debug" if es_debug else tipo_reto,
             "dificultad_reto_actual": dificultad,
             "tematica_actual": tematica
         })
-        responder_mensaje(numero_remitente, reto["enunciado"], historial_chat)
+
+        msg_completo = f"{tipo_msg}\n\n{reto['enunciado']}"
+        responder_mensaje(numero_remitente, msg_completo, historial_chat)
+
+
+# --- ✅ NUEVA FUNCIÓN FASE 3: PROCESAR RESPUESTA DE DEFENSA ---
+
+def handle_respuesta_defensa(mensaje_texto, numero_remitente, usuario, historial_chat):
+    """Evalúa si el estudiante realmente comprende su solución (anti-plagio)."""
+    pregunta = usuario.get("pregunta_defensa_actual", "¿Por qué?")
+    enunciado = usuario.get("reto_actual_enunciado", "")
+
+    responder_mensaje(numero_remitente, f"🤔 Analizando tu justificación...", historial_chat)
+
+    es_valido = ai.evaluar_defensa(pregunta, mensaje_texto, enunciado)
+
+    if es_valido:
+        responder_mensaje(numero_remitente, f"✅ ¡Explicación válida! Has demostrado dominio.", historial_chat)
+        procesar_acierto(numero_remitente, usuario, historial_chat)
+    else:
+        msg_fail = f"❌ Mmm, esa explicación no cuadra con tu código.\n"
+        msg_fail += "Te daré la mitad de los puntos esta vez, pero asegúrate de entender lo que escribes."
+        responder_mensaje(numero_remitente, msg_fail, historial_chat)
+
+        # Damos puntos parciales (aquí damos acierto completo, pero podrías modificar procesar_acierto)
+        procesar_acierto(numero_remitente, usuario, historial_chat)
+
+

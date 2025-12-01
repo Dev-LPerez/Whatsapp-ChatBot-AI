@@ -161,3 +161,74 @@ def generar_cheat_sheet(tema):
         return response.text
     except Exception as e:
         return f"No pude generar la ficha de colección. Error: {e}"
+
+
+# --- ✅ NUEVAS FUNCIONES FASE 3 (ANTI-PLAGIO Y DEPURACIÓN) ---
+
+def generar_reto_depuracion(nivel, tematica):
+    """Genera un código que PARECE correcto pero tiene un bug lógico o de sintaxis."""
+    if not client: return {"error": "IA no configurada"}
+
+    model = 'gemini-2.0-flash'
+    prompt = f"""
+    Genera un 'Reto de Depuración' (Debugging) para Java, Nivel {nivel}, tema '{tematica}'.
+    
+    1. Crea un código breve que tenga UN (1) error sutil (lógico o de sintaxis común).
+    2. El error no debe ser obvio a simple vista.
+    
+    Salida JSON:
+    {{
+        "enunciado": "Encuentra el error en este código: ... (código con bug aquí)",
+        "solucion_ideal": "El error está en la línea X. La corrección es...",
+        "pistas": ["Revisa los tipos de datos", "Mira bien el bucle", "Chequea la condición"],
+        "bug_explicacion": "Explicación breve del error para el profesor"
+    }}
+    """
+    try:
+        response = client.models.generate_content(model=model, contents=prompt)
+        json_text = response.text.strip().replace("```json", "").replace("```", "")
+        return json.loads(json_text)
+    except Exception as e:
+        return {"error": f"Error generando debug: {e}"}
+
+
+def generar_pregunta_defensa(enunciado, solucion_usuario):
+    """Genera una pregunta socrática para validar comprensión."""
+    if not client: return "Explícame tu código paso a paso."
+
+    model = 'gemini-2.0-flash'
+    prompt = f"""
+    El estudiante ha resuelto este reto correctamente.
+    Reto: {enunciado}
+    Solución del estudiante: {solucion_usuario}
+
+    Genera UNA sola pregunta corta y directa para verificar que NO copió el código.
+    Pregunta sobre el "por qué" de una decisión específica (ej: por qué ese tipo de bucle, por qué esa variable).
+    No felicites, ve directo a la pregunta.
+    """
+    try:
+        response = client.models.generate_content(model=model, contents=prompt)
+        return response.text
+    except Exception as e:
+        return "¿Podrías explicarme la lógica de tu solución?"
+
+
+def evaluar_defensa(pregunta, respuesta_usuario, contexto_reto):
+    """Evalúa si la justificación del estudiante tiene sentido."""
+    if not client: return True # Fallback
+
+    model = 'gemini-2.0-flash'
+    prompt = f"""
+    Contexto: {contexto_reto}
+    Pregunta de control: {pregunta}
+    Respuesta del estudiante: {respuesta_usuario}
+
+    ¿La respuesta demuestra que el estudiante entiende su propio código?
+    Responde SOLO "SI" o "NO".
+    """
+    try:
+        response = client.models.generate_content(model=model, contents=prompt)
+        text = response.text.strip().upper()
+        return "SI" in text
+    except Exception:
+        return True

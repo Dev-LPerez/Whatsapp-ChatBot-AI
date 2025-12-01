@@ -60,6 +60,7 @@ IDEA = "💡"
 PREGUNTA = "🤔"
 INCORRECTO = "❌"
 CORRECTO = "✅"
+CANDADO = "🔒"
 # Estados y resultados
 
 # Constantes de emojis para mantener consistencia en toda la app
