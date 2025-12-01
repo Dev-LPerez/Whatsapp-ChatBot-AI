@@ -173,14 +173,28 @@ PORT=8000
 
 ### 5️⃣ Configurar Firebase
 
-Descarga tu archivo `firebase_credentials.json` desde la consola de Firebase y colócalo en la raíz del proyecto.
+**Opción 1: Usando archivo de credenciales (Recomendado para desarrollo local)**
+
+Descarga tu archivo de credenciales desde la consola de Firebase:
 
 **Pasos:**
 1. Ve a [Firebase Console](https://console.firebase.google.com/)
 2. Selecciona tu proyecto
 3. Ve a **Configuración del Proyecto** > **Cuentas de Servicio**
 4. Clic en **Generar nueva clave privada**
-5. Guarda el archivo como `firebase_credentials.json`
+5. Guarda el archivo como `firebase_credentials.json` en la raíz del proyecto
+
+**⚠️ IMPORTANTE: Este archivo contiene credenciales sensibles**
+- **NUNCA** lo subas a Git (ya está en `.gitignore`)
+- Usa `firebase_credentials.json.example` como referencia
+- En producción, usa variables de entorno
+
+**Opción 2: Usando variables de entorno (Recomendado para producción)**
+
+```env
+GOOGLE_APPLICATION_CREDENTIALS=firebase_credentials.json
+# O configura las credenciales directamente como variables de entorno
+```
 
 ### 6️⃣ Verificar Configuración
 
