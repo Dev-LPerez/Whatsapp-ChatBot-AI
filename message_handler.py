@@ -263,66 +263,79 @@ def handle_seleccion_dificultad(mensaje_texto, numero_remitente, usuario, histor
         responder_mensaje(numero_remitente, respuesta_chat, historial_chat)
 
 
+# --- EN message_handler.py ---
+
 def handle_solucion_reto(mensaje_texto, numero_remitente, usuario, historial_chat, es_debug=False):
     enunciado = usuario.get("reto_actual_enunciado")
 
-    # 1. EVALUAR PRIMERO CON IA
+    # 1. EVALUAR CON IA
     tipo_reto = "depuración de código" if es_debug else (usuario.get("curso_actual") or usuario.get("tipo_reto_actual"))
     feedback = ai.evaluar_solucion_con_ia(enunciado, mensaje_texto, tipo_reto)
 
-    # 2. CÁLCULO DE TIEMPO (SILENCIOSO)
-    es_sospechoso = False
+    # 2. CÁLCULO DE TIEMPO
     tiempo_tomado = 0
-    tiempo_esperado = usuario.get("tiempo_estimado_ia", 60)
-    timestamp_inicio = usuario.get("timestamp_inicio_reto")
+    tiempo_estimado = usuario.get("tiempo_estimado_ia", 60)
+    es_sospechoso = False
 
-    if timestamp_inicio:
+    if usuario.get("timestamp_inicio_reto"):
         try:
-            inicio = datetime.fromisoformat(timestamp_inicio)
+            inicio = datetime.fromisoformat(usuario["timestamp_inicio_reto"])
             fin = datetime.now()
             tiempo_tomado = (fin - inicio).total_seconds()
-
-            # Umbral de sospecha: menos del 50% del tiempo estimado
-            if tiempo_tomado < (tiempo_esperado / 2):
+            if tiempo_tomado < (tiempo_estimado / 2):
                 es_sospechoso = True
         except ValueError:
             pass
 
-    # 3. LÓGICA DE FILTRADO DE REPORTES (¡AQUÍ ESTÁ LA SOLUCIÓN!)
-    # Solo reportamos si es sospechoso Y NO es una pregunta teórica Y el mensaje es lo suficientemente largo
-    # o la IA dice que es CORRECTO (copy-paste rápido)
+    # 3. VARIABLES DE ESTADO
     es_pregunta_teorica = "[PREGUNTA]" in feedback
-    es_mensaje_corto = len(mensaje_texto) < 15  # Ignora "Hola", "No se", "Ayuda"
+    es_mensaje_corto = len(mensaje_texto) < 15
     es_correcto = feedback.strip().upper().startswith("✅")
 
-    # REGISTRAR ALERTA SOLO SI:
-    # 1. Es rápido (sospechoso)
-    # 2. NO es una pregunta teórica
-    # 3. Y ADEMÁS: (Es correcto O es un intento largo de código)
-    should_report = es_sospechoso and not es_pregunta_teorica and (es_correcto or not es_mensaje_corto)
+    # Determinar resultado para el log
+    resultado_log = "CONSULTA" if es_pregunta_teorica else ("CORRECTO" if es_correcto else "FALLO")
 
-    if should_report:
-        print(f"🚩 FLAG: {numero_remitente} respondió en {tiempo_tomado:.1f}s (Est: {tiempo_esperado}s)")
-        datos_alerta = {
-            "nombre": usuario.get("nombre", "Desconocido"),
+    # 4. REGISTRO DE LOG ACADÉMICO (¡NUEVO!) 📝
+    # No registramos saludos cortos ni preguntas teóricas como intentos de reto
+    if not es_pregunta_teorica and not es_mensaje_corto:
+
+        # Recuperar tema actual para el filtro
+        tema_log = usuario.get("tematica_actual")
+        if not tema_log and usuario.get("curso_actual"):
+            # Intentar sacar el tema del curso si no está explícito
+            try:
+                idx = usuario.get("leccion_actual", 0)
+                tema_log = CURSOS[usuario["curso_actual"]]["lecciones"][idx]
+            except:
+                tema_log = "Java General"
+
+        datos_log = {
+            "nombre": usuario.get("nombre"),
+            "tema": tema_log or "Reto Rápido",
+            "dificultad": usuario.get("dificultad_reto_actual", "General"),
+            "resultado": resultado_log,
             "enunciado": enunciado,
             "respuesta": mensaje_texto,
-            "tiempo_tomado": round(tiempo_tomado, 2),
-            "tiempo_estimado": tiempo_esperado,
-            "timestamp_envio": timestamp_inicio
+            "feedback_ia": feedback,
+            "tiempo_tomado": round(tiempo_tomado, 1),
+            "tiempo_estimado": tiempo_estimado,
+            "es_sospechoso": es_sospechoso and es_correcto  # Solo marcamos sospecha si acertó
         }
-        db.registrar_alerta_seguridad(numero_remitente, datos_alerta)
+        db.registrar_log_reto(numero_remitente, datos_log)
 
-    # 4. FLUJO DE RESPUESTA AL USUARIO
+        # Si es sospechoso, TAMBIÉN registramos la alerta de seguridad (para el panel de alertas rojas)
+        if es_sospechoso and es_correcto:
+            db.registrar_alerta_seguridad(numero_remitente, datos_log)
+
+    # 5. FLUJO DE RESPUESTA (Igual que antes)
     if es_pregunta_teorica:
         tema_actual = "programación en Java"
         if usuario.get("curso_actual"):
             tema_actual = CURSOS[usuario["curso_actual"]]["lecciones"][usuario["leccion_actual"]]
-        respuesta_conversacional = ai.chat_conversacional_con_ia(mensaje_texto, historial_chat, tema_actual)
-        responder_mensaje(numero_remitente, respuesta_conversacional, historial_chat)
+        respuesta = ai.chat_conversacional_con_ia(mensaje_texto, historial_chat, tema_actual)
+        responder_mensaje(numero_remitente, respuesta, historial_chat)
 
     elif es_correcto:
-        # Lógica de defensa (Si es sospechoso, activamos defensa obligatoria)
         dificultad = usuario.get("dificultad_reto_actual", "Fácil")
         activar_defensa = es_sospechoso or (dificultad != "Fácil" and not es_debug and random.random() < 0.3)
 
@@ -330,23 +343,16 @@ def handle_solucion_reto(mensaje_texto, numero_remitente, usuario, historial_cha
             pregunta_defensa = ai.generar_pregunta_defensa(enunciado, mensaje_texto)
             db.actualizar_usuario(numero_remitente, {
                 "estado_conversacion": "esperando_defensa",
-                "pregunta_defensa_actual": pregunta_defensa,
-                "bandera_sospecha_velocidad": es_sospechoso
+                "pregunta_defensa_actual": pregunta_defensa
             })
-
-            if es_sospechoso:
-                msg_validacion = f"✅ ¡Código correcto!\n\nPara validar tu aprendizaje y asignarte los puntos, por favor respóndeme esta breve pregunta sobre tu solución:"
-            else:
-                msg_validacion = f"✅ ¡Bien hecho!\n\nSolo una pregunta rápida para cerrar el tema:"
-
-            responder_mensaje(numero_remitente, msg_validacion, historial_chat)
+            msg = f"✅ ¡Código correcto!\n\n{'Para validar tu aprendizaje' if es_sospechoso else 'Solo una pregunta rápida'}:"
+            responder_mensaje(numero_remitente, msg, historial_chat)
             time.sleep(1)
             responder_mensaje(numero_remitente, pregunta_defensa, historial_chat)
         else:
             responder_mensaje(numero_remitente, feedback, historial_chat)
             procesar_acierto(numero_remitente, usuario, historial_chat)
     else:
-        # Respuesta incorrecta
         responder_mensaje(numero_remitente, feedback, historial_chat)
         procesar_fallo(numero_remitente, usuario, historial_chat)
 

@@ -225,3 +225,49 @@ def registrar_alerta_seguridad(numero_telefono, datos_alerta):
     except Exception as e:
         print(f"❌ Error registrando alerta en BD: {e}")
         return False
+
+
+# --- AGREGAR AL FINAL DE database.py ---
+
+def registrar_log_reto(numero_telefono, datos_log):
+    """
+    Registra CUALQUIER intento de reto (sea correcto, incorrecto o sospechoso)
+    para el historial académico completo en el dashboard.
+    """
+    if not db: return False
+
+    try:
+        # Estructura del log académico
+        log_entry = {
+            "estudiante_id": str(numero_telefono),
+            "nombre_estudiante": datos_log.get("nombre", "Estudiante"),
+
+            # Contexto Educativo
+            "tema": datos_log.get("tema", "General"),
+            "dificultad": datos_log.get("dificultad", "Fácil"),
+            "resultado": datos_log.get("resultado"),  # "CORRECTO", "FALLO", "DEFENSA_OK", etc.
+
+            # Evidencia
+            "enunciado": datos_log.get("enunciado"),
+            "respuesta": datos_log.get("respuesta"),
+            "feedback_ia": datos_log.get("feedback_ia"),
+
+            # Métricas y Seguridad
+            "tiempo_tomado": datos_log.get("tiempo_tomado"),
+            "tiempo_estimado": datos_log.get("tiempo_estimado"),
+            "es_sospechoso": datos_log.get("es_sospechoso", False),
+
+            "timestamp": datetime.now().isoformat()
+        }
+
+        # Guardamos en 'challenge_logs' (colección pública para el dashboard)
+        (db.collection('artifacts').document(APP_ID_DASHBOARD)
+         .collection('public').document('data')
+         .collection('challenge_logs').add(log_entry))
+
+        print(f"📝 Log académico registrado para {numero_telefono}")
+        return True
+
+    except Exception as e:
+        print(f"❌ Error registrando log: {e}")
+        return False
