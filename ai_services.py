@@ -13,6 +13,10 @@ if GEMINI_API_KEY:
 
 
 def generar_reto_con_ia(nivel, tipo_reto, dificultad, tematica=None):
+    """
+    Genera un reto de programación validado por IA.
+    Incluye un campo 'tiempo_estimado' oculto para detectar copy-paste.
+    """
     if not client: return {"error": "IA no configurada."}
 
     model = 'gemini-2.0-flash'
@@ -22,10 +26,13 @@ def generar_reto_con_ia(nivel, tipo_reto, dificultad, tematica=None):
     - **Dificultad:** {dificultad}
     {f"- **Temática Específica:** '{tematica}'." if tematica else ""}
 
-    Tu respuesta DEBE ser un objeto JSON válido con "enunciado", "solucion_ideal" y "pistas".
-    - "enunciado": El texto del reto, claro, conciso y con emojis 💡.
-    - "solucion_ideal": La solución ejemplar en el lenguaje especificado.
-    - "pistas": Un array de 3 strings con pistas conceptuales progresivas.
+    Tu respuesta DEBE ser un objeto JSON válido con la siguiente estructura exacta:
+    {{
+        "enunciado": "Texto del reto, claro, conciso y con emojis 💡.",
+        "solucion_ideal": "La solución ejemplar en código.",
+        "pistas": ["Pista 1", "Pista 2", "Pista 3"],
+        "tiempo_estimado": 120  // Número ENTERO: Segundos estimados que tomaría a un humano promedio escribir esto (sé generoso).
+    }}
     """
     try:
         response = client.models.generate_content(model=model, contents=prompt)
@@ -61,18 +68,25 @@ def chat_conversacional_con_ia(mensaje_usuario, historial_chat, tema_actual=None
 
     model = 'gemini-2.0-flash'
     prompt = f"""
-    Eres "LogicBot", un tutor de programación amigable.
+    Eres "LogicBot", un tutor de programación experto EXCLUSIVAMENTE en **JAVA**.
     **Historial:** {historial_chat}
     **Mensaje del usuario:** "{mensaje_usuario}"
 
-    **TUS DOS MODOS DE OPERACIÓN:**
+    🛑 **REGLA DE ORO (CONTEXTO):**
+    Tu especialidad es JAVA. Si el usuario te pregunta sobre:
+    - Otros lenguajes (Python, C++, JS, etc.) -> Rechaza amablemente y ofrece la alternativa en Java.
+    - Temas no técnicos (Cocina, deportes, etc.) -> Recuerda que eres un bot educativo.
+
+    *Ejemplo de rechazo:* "🤖 Interesante pregunta, pero mi especialidad es Java. En Java, ese concepto se maneja así..."
+
+    **TUS DOS MODOS DE OPERACIÓN (SOLO PARA JAVA):**
 
     1. **MODO TEORÍA (El usuario pregunta "¿Qué es?", "¿Diferencia entre?", "No entiendo"):**
-       - AQUÍ SÍ PUEDES EXPLICAR DIRECTAMENTE.
+       - Explica el concepto en el contexto de Java.
        - Usa analogías del mundo real (ej: cocina, videojuegos).
        - Sé claro y conciso.
 
-    2. **MODO RETO/CÓDIGO (El usuario pide que le hagas el código o le des la solución a un ejercicio):**
+    2. **MODO RETO/CÓDIGO (El usuario pide que le hagas el código o le des la solución):**
        - AQUÍ NO DES LA SOLUCIÓN.
        - Usa el método socrático: haz preguntas guía.
        - Da pistas, no código completo.
@@ -172,16 +186,17 @@ def generar_reto_depuracion(nivel, tematica):
     model = 'gemini-2.0-flash'
     prompt = f"""
     Genera un 'Reto de Depuración' (Debugging) para Java, Nivel {nivel}, tema '{tematica}'.
-    
+
     1. Crea un código breve que tenga UN (1) error sutil (lógico o de sintaxis común).
     2. El error no debe ser obvio a simple vista.
-    
+
     Salida JSON:
     {{
         "enunciado": "Encuentra el error en este código: ... (código con bug aquí)",
         "solucion_ideal": "El error está en la línea X. La corrección es...",
         "pistas": ["Revisa los tipos de datos", "Mira bien el bucle", "Chequea la condición"],
-        "bug_explicacion": "Explicación breve del error para el profesor"
+        "bug_explicacion": "Explicación breve del error para el profesor",
+        "tiempo_estimado": 60 
     }}
     """
     try:
@@ -215,7 +230,7 @@ def generar_pregunta_defensa(enunciado, solucion_usuario):
 
 def evaluar_defensa(pregunta, respuesta_usuario, contexto_reto):
     """Evalúa si la justificación del estudiante tiene sentido."""
-    if not client: return True # Fallback
+    if not client: return True  # Fallback
 
     model = 'gemini-2.0-flash'
     prompt = f"""
