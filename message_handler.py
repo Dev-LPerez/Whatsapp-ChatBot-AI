@@ -278,10 +278,10 @@ def handle_solucion_reto(mensaje_texto, numero_remitente, usuario, historial_cha
             tiempo_tomado = (fin - inicio).total_seconds()
             tiempo_esperado = usuario.get("tiempo_estimado_ia", 60)
 
-            # Lógica de detección: Menos del 15% del tiempo estimado o <10s
-            umbral_humano = max(10, tiempo_esperado * 0.15)
-
-            if tiempo_tomado < umbral_humano:
+            # LÓGICA ACTUALIZADA Y ESTRICTA:
+            # Si el usuario responde en menos de la mitad (50%) del tiempo estimado, es sospechoso.
+            # Ejemplo: Si IA estima 120s, cualquier respuesta < 60s será flaggeada.
+            if tiempo_tomado < (tiempo_esperado / 2):
                 es_sospechoso = True
                 print(f"🚩 FLAG: {numero_remitente} respondió en {tiempo_tomado:.1f}s (Est: {tiempo_esperado}s)")
 
