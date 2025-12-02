@@ -96,7 +96,10 @@ def crear_usuario(numero_telefono, nombre):
         "logros_desbloqueados": "[]",
         "retos_completados": 0,
         "retos_sin_pistas": 0,
-        "class_token": None  # Campo nuevo para vinculación
+        "class_token": None,  # Campo nuevo para vinculación
+        # NUEVOS CAMPOS GLOBALES PARA ANALÍTICA
+        "total_pistas_usadas": 0,  # Histórico acumulado
+        "total_fallos": 0  # Histórico de errores
     }
 
     try:
@@ -116,7 +119,7 @@ def actualizar_usuario(numero_telefono, datos):
 
         # Sincronización automática con Dashboard si hay cambios relevantes
         campos_dashboard = ["puntos", "nivel", "racha_dias", "progreso_temas", "retos_completados", "historial_chat",
-                            "class_token"]
+                            "class_token", "total_pistas_usadas", "total_fallos"]
         if any(campo in datos for campo in campos_dashboard):
             # Obtenemos el usuario completo actualizado para sincronizar
             usuario_actualizado = obtener_usuario(numero_telefono)
@@ -147,6 +150,9 @@ def sincronizar_con_dashboard(numero_telefono, datos_usuario):
         "retos_sin_pistas": datos_usuario.get("retos_sin_pistas"),
         "pistas_usadas": datos_usuario.get("pistas_usadas"),
         "ultima_conexion": datos_usuario.get("ultima_conexion"),
+        # NUEVOS CAMPOS PARA ANALÍTICA
+        "total_pistas_usadas": datos_usuario.get("total_pistas_usadas", 0),
+        "total_fallos": datos_usuario.get("total_fallos", 0),
         # Limitamos el historial para no saturar
         "historial_chat": datos_usuario.get("historial_chat", "[]")
     }

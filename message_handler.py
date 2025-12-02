@@ -130,10 +130,14 @@ def handle_text_message(mensaje_texto, numero_remitente, usuario):
             if pistas_usadas < len(pistas_guardadas):
                 pista_a_mostrar = pistas_guardadas[pistas_usadas]
 
-                # --- CORRECCIÓN CRÍTICA ---
-                # Actualizamos el contador en la base de datos
+                # --- ACTUALIZACIÓN: CONTADOR GLOBAL Y ACTUAL ---
+                # Obtener el usuario actualizado para tener el valor más reciente
+                usuario_actual = db.obtener_usuario(numero_remitente)
+                total_pistas = usuario_actual.get("total_pistas_usadas", 0) + 1
+
                 db.actualizar_usuario(numero_remitente, {
-                    "pistas_usadas": pistas_usadas + 1
+                    "pistas_usadas": pistas_usadas + 1,
+                    "total_pistas_usadas": total_pistas  # Contador histórico global
                 })
                 # --------------------------
 
@@ -391,7 +395,12 @@ def avanzar_leccion(numero_remitente, usuario, historial_chat):
 
 def procesar_fallo(numero_remitente, usuario, historial_chat):
     intentos = usuario.get("intentos_fallidos", 0) + 1
-    db.actualizar_usuario(numero_remitente, {"intentos_fallidos": intentos})
+    total_fallos_global = usuario.get("total_fallos", 0) + 1  # Contador histórico global
+
+    db.actualizar_usuario(numero_remitente, {
+        "intentos_fallidos": intentos,
+        "total_fallos": total_fallos_global  # Guardamos histórico
+    })
 
     if usuario.get("estado_conversacion") == "en_curso" and intentos >= UMBRAL_DE_FALLOS:
         db.actualizar_usuario(numero_remitente, {"estado_conversacion": "esperando_ayuda_teorica"})
