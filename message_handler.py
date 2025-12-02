@@ -270,10 +270,12 @@ def handle_solucion_reto(mensaje_texto, numero_remitente, usuario, historial_cha
     es_sospechoso = False
     tiempo_tomado = 0
     tiempo_esperado = 60
+    timestamp_inicio = None  # Para guardar la hora del reto
 
     if usuario.get("timestamp_inicio_reto"):
         try:
-            inicio = datetime.fromisoformat(usuario["timestamp_inicio_reto"])
+            timestamp_inicio = usuario["timestamp_inicio_reto"]
+            inicio = datetime.fromisoformat(timestamp_inicio)
             fin = datetime.now()
             tiempo_tomado = (fin - inicio).total_seconds()
             tiempo_esperado = usuario.get("tiempo_estimado_ia", 60)
@@ -285,13 +287,14 @@ def handle_solucion_reto(mensaje_texto, numero_remitente, usuario, historial_cha
                 es_sospechoso = True
                 print(f"🚩 FLAG: {numero_remitente} respondió en {tiempo_tomado:.1f}s (Est: {tiempo_esperado}s)")
 
-                # 🚨 REGISTRAR ALERTA EN DASHBOARD
+                # 🚨 REGISTRAR ALERTA COMPLETA EN DASHBOARD
                 datos_alerta = {
                     "nombre": usuario.get("nombre", "Desconocido"),
                     "enunciado": enunciado,
                     "respuesta": mensaje_texto,
                     "tiempo_tomado": round(tiempo_tomado, 2),
-                    "tiempo_estimado": tiempo_esperado
+                    "tiempo_estimado": tiempo_esperado,
+                    "timestamp_envio": timestamp_inicio  # ✅ Guardamos la hora del reto
                 }
                 db.registrar_alerta_seguridad(numero_remitente, datos_alerta)
 
@@ -348,9 +351,15 @@ def handle_solucion_reto(mensaje_texto, numero_remitente, usuario, historial_cha
         procesar_fallo(numero_remitente, usuario, historial_chat)
 
 
-def procesar_acierto(numero_remitente, usuario, historial_chat):
+def procesar_acierto(numero_remitente, usuario, historial_chat, factor_puntos=1.0):
     dificultad = usuario.get("dificultad_reto_actual", "Fácil")
-    puntos_ganados = PUNTOS_POR_DIFICULTAD.get(dificultad, 5)
+
+    # Obtenemos los puntos base según dificultad
+    puntos_base = PUNTOS_POR_DIFICULTAD.get(dificultad, 10)
+
+    # APLICAMOS EL FACTOR (Aquí está el arreglo) 🛠️
+    puntos_ganados = int(puntos_base * factor_puntos)
+
     racha = usuario.get("racha_dias", 1)
     puntos_con_bonus = puntos_ganados + racha
 
@@ -596,11 +605,12 @@ def handle_respuesta_defensa(mensaje_texto, numero_remitente, usuario, historial
 
     if es_valido:
         responder_mensaje(numero_remitente, f"✅ ¡Explicación válida! Has demostrado dominio.", historial_chat)
+        # 1.0 es el valor por defecto, puntos completos
         procesar_acierto(numero_remitente, usuario, historial_chat)
     else:
         msg_fail = f"❌ Mmm, esa explicación no cuadra con tu código.\n"
         msg_fail += "Te daré la mitad de los puntos esta vez, pero asegúrate de entender lo que escribes."
         responder_mensaje(numero_remitente, msg_fail, historial_chat)
 
-        # Damos puntos parciales (aquí damos acierto completo, pero podrías modificar procesar_acierto)
-        procesar_acierto(numero_remitente, usuario, historial_chat)
+        # CORRECCIÓN AQUÍ: Pasamos 0.5 para dar la mitad de puntos
+        procesar_acierto(numero_remitente, usuario, historial_chat, factor_puntos=0.5)

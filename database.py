@@ -205,6 +205,8 @@ def registrar_alerta_seguridad(numero_telefono, datos_alerta):
             # Evidencia temporal
             "tiempo_estimado": datos_alerta.get("tiempo_estimado"),
             "tiempo_tomado": datos_alerta.get("tiempo_tomado"),
+            "timestamp_envio": datos_alerta.get("timestamp_envio"),  # ✅ Hora del envío del reto
+            "timestamp_alerta": datetime.now().isoformat(),  # ✅ Hora de detección de la alerta
 
             # Metadatos
             "leida": False,
