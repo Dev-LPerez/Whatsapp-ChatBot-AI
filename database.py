@@ -2,7 +2,7 @@
 
 import os
 import json
-from datetime import date
+from datetime import date, datetime
 import firebase_admin
 from firebase_admin import credentials, firestore
 from config import CURSOS
@@ -179,4 +179,47 @@ def vincular_alumno_a_clase(numero_telefono, token_clase):
         return True
     except Exception as e:
         print(f"❌ Error vinculando clase: {e}")
+        return False
+
+
+# ✅ NUEVA FUNCIÓN PARA REGISTRAR ALERTAS
+def registrar_alerta_seguridad(numero_telefono, datos_alerta):
+    """
+    Registra una alerta de integridad (velocidad, copy-paste) en Firestore
+    para que sea notificada en el Dashboard Docente.
+    """
+    if not db: return False
+
+    try:
+        # Estructura del documento de alerta
+        alerta = {
+            "tipo": "velocidad_sospechosa",
+            "nivel_severidad": "alta",  # alta, media, baja
+            "estudiante_id": str(numero_telefono),
+            "nombre_estudiante": datos_alerta.get("nombre", "Estudiante"),
+
+            # Detalles del evento
+            "reto_enunciado": datos_alerta.get("enunciado"),
+            "respuesta_estudiante": datos_alerta.get("respuesta"),
+
+            # Evidencia temporal
+            "tiempo_estimado": datos_alerta.get("tiempo_estimado"),
+            "tiempo_tomado": datos_alerta.get("tiempo_tomado"),
+
+            # Metadatos
+            "leida": False,
+            "creado_en": datetime.now().isoformat()
+        }
+
+        # Guardamos en la colección pública 'alerts' dentro de artifacts
+        # Ruta: artifacts/{APP_ID}/public/data/alerts/{auto_id}
+        (db.collection('artifacts').document(APP_ID_DASHBOARD)
+         .collection('public').document('data')
+         .collection('alerts').add(alerta))
+
+        print(f"🚨 Alerta de seguridad registrada para {numero_telefono}")
+        return True
+
+    except Exception as e:
+        print(f"❌ Error registrando alerta en BD: {e}")
         return False
