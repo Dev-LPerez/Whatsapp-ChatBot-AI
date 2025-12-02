@@ -3,6 +3,7 @@
 import json
 import random
 import time
+from datetime import datetime
 import database as db
 import ai_services as ai
 from config import (
@@ -97,11 +98,15 @@ def handle_text_message(mensaje_texto, numero_remitente, usuario):
             # Llamamos a la nueva función de BD
             exito = db.vincular_alumno_a_clase(numero_remitente, token)
             if exito:
-                responder_mensaje(numero_remitente, f"✅ ¡Conectado! Ahora estás vinculado a la clase *{token}*.\nTu profesor podrá ver tu progreso.", historial_chat)
+                responder_mensaje(numero_remitente,
+                                  f"✅ ¡Conectado! Ahora estás vinculado a la clase *{token}*.\nTu profesor podrá ver tu progreso.",
+                                  historial_chat)
             else:
                 responder_mensaje(numero_remitente, "❌ Hubo un error al unirte. Intenta de nuevo.", historial_chat)
         else:
-            responder_mensaje(numero_remitente, f"⚠️ Formato incorrecto.\nUsa: *unirse CÓDIGO*\nEjemplo: unirse PROG-2025-A", historial_chat)
+            responder_mensaje(numero_remitente,
+                              f"⚠️ Formato incorrecto.\nUsa: *unirse CÓDIGO*\nEjemplo: unirse PROG-2025-A",
+                              historial_chat)
         return
 
     # Comandos Globales
@@ -260,6 +265,40 @@ def handle_seleccion_dificultad(mensaje_texto, numero_remitente, usuario, histor
 
 def handle_solucion_reto(mensaje_texto, numero_remitente, usuario, historial_chat, es_debug=False):
     enunciado = usuario.get("reto_actual_enunciado")
+
+    # --- 🕵️ DETECTOR OCULTO DE VELOCIDAD ---
+    es_sospechoso = False
+    tiempo_tomado = 0
+    tiempo_esperado = 60
+
+    if usuario.get("timestamp_inicio_reto"):
+        try:
+            inicio = datetime.fromisoformat(usuario["timestamp_inicio_reto"])
+            fin = datetime.now()
+            tiempo_tomado = (fin - inicio).total_seconds()
+            tiempo_esperado = usuario.get("tiempo_estimado_ia", 60)
+
+            # Lógica de detección: Menos del 15% del tiempo estimado o <10s
+            umbral_humano = max(10, tiempo_esperado * 0.15)
+
+            if tiempo_tomado < umbral_humano:
+                es_sospechoso = True
+                print(f"🚩 FLAG: {numero_remitente} respondió en {tiempo_tomado:.1f}s (Est: {tiempo_esperado}s)")
+
+                # 🚨 REGISTRAR ALERTA EN DASHBOARD
+                datos_alerta = {
+                    "nombre": usuario.get("nombre", "Desconocido"),
+                    "enunciado": enunciado,
+                    "respuesta": mensaje_texto,
+                    "tiempo_tomado": round(tiempo_tomado, 2),
+                    "tiempo_estimado": tiempo_esperado
+                }
+                db.registrar_alerta_seguridad(numero_remitente, datos_alerta)
+
+        except ValueError:
+            pass
+    # ----------------------------------------
+
     tipo_reto = "depuración de código" if es_debug else (usuario.get("curso_actual") or usuario.get("tipo_reto_actual"))
 
     feedback = ai.evaluar_solucion_con_ia(enunciado, mensaje_texto, tipo_reto)
@@ -270,28 +309,39 @@ def handle_solucion_reto(mensaje_texto, numero_remitente, usuario, historial_cha
             tema_actual = CURSOS[usuario["curso_actual"]]["lecciones"][usuario["leccion_actual"]]
         respuesta_conversacional = ai.chat_conversacional_con_ia(mensaje_texto, historial_chat, tema_actual)
         responder_mensaje(numero_remitente, respuesta_conversacional, historial_chat)
+
     elif feedback.strip().upper().startswith("✅"):
-        responder_mensaje(numero_remitente, feedback, historial_chat)
 
-        # --- NUEVO: TRIGGER DE DEFENSA SOCRÁTICA ---
-        # Si el reto fue "Fácil" o es "Debug", pasamos directo.
-        # Si es "Intermedio/Difícil", activamos defensa el 50% de las veces.
+        # 1. Si es sospechoso -> Defensa OBLIGATORIA
+        # 2. Si no es sospechoso -> Defensa ALEATORIA (30% en retos Intermedio/Difícil)
         dificultad = usuario.get("dificultad_reto_actual", "Fácil")
-        requiere_defensa = dificultad != "Fácil" and random.random() < 0.5 and not es_debug
+        activar_defensa = es_sospechoso or (dificultad != "Fácil" and not es_debug and random.random() < 0.3)
 
-        if requiere_defensa:
+        if activar_defensa:
             pregunta_defensa = ai.generar_pregunta_defensa(enunciado, mensaje_texto)
 
+            # Guardamos estado y la bandera de sospecha
             db.actualizar_usuario(numero_remitente, {
                 "estado_conversacion": "esperando_defensa",
-                "pregunta_defensa_actual": pregunta_defensa
+                "pregunta_defensa_actual": pregunta_defensa,
+                "bandera_sospecha_velocidad": es_sospechoso
             })
 
+            # --- MENSAJE AL USUARIO (Excusas pedagógicas) ---
+            if es_sospechoso:
+                # Mensaje ligeramente más estricto pero amable
+                msg_validacion = f"✅ ¡Código correcto!\n\nPara validar tu aprendizaje y asignarte los puntos, por favor respóndeme esta breve pregunta sobre tu solución:"
+            else:
+                # Mensaje estándar de curiosidad
+                msg_validacion = f"✅ ¡Bien hecho!\n\nSolo una pregunta rápida para cerrar el tema:"
+
+            responder_mensaje(numero_remitente, msg_validacion, historial_chat)
             time.sleep(1)
-            msg_defensa = f"🧐 *Un momento...* Para validar tu solución:\n\n{pregunta_defensa}"
-            responder_mensaje(numero_remitente, msg_defensa, historial_chat)
+            responder_mensaje(numero_remitente, pregunta_defensa, historial_chat)
+
         else:
             # Si no requiere defensa, damos los puntos directamente
+            responder_mensaje(numero_remitente, feedback, historial_chat)
             procesar_acierto(numero_remitente, usuario, historial_chat)
     else:
         responder_mensaje(numero_remitente, feedback, historial_chat)
@@ -508,6 +558,9 @@ def generar_y_enviar_reto(numero_remitente, usuario, tipo_reto, dificultad, tema
         responder_mensaje(numero_remitente, "Ups, la IA se tomó un descanso. Intenta de nuevo.", historial_chat)
         db.actualizar_usuario(numero_remitente, {"estado_conversacion": "menu_principal"})
     else:
+        # 🕒 OBTENEMOS TIMESTAMP ACTUAL PARA EL DETECTOR DE VELOCIDAD
+        ahora = datetime.now().isoformat()
+
         # Guardamos el reto
         db.actualizar_usuario(numero_remitente, {
             "estado_conversacion": nuevo_estado,
@@ -515,6 +568,12 @@ def generar_y_enviar_reto(numero_remitente, usuario, tipo_reto, dificultad, tema
             "reto_actual_solucion": reto["solucion_ideal"],
             "reto_actual_pistas": json.dumps(reto["pistas"]),
             "pistas_usadas": 0,
+
+            # --- NUEVOS CAMPOS DE TIEMPO ---
+            "timestamp_inicio_reto": ahora,
+            "tiempo_estimado_ia": reto.get("tiempo_estimado", 120),  # Default 2 min si falla
+            # -------------------------------
+
             "tipo_reto_actual": "debug" if es_debug else tipo_reto,
             "dificultad_reto_actual": dificultad,
             "tematica_actual": tematica
@@ -545,5 +604,3 @@ def handle_respuesta_defensa(mensaje_texto, numero_remitente, usuario, historial
 
         # Damos puntos parciales (aquí damos acierto completo, pero podrías modificar procesar_acierto)
         procesar_acierto(numero_remitente, usuario, historial_chat)
-
-
