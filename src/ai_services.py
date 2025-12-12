@@ -3,7 +3,7 @@
 import os
 import json
 from google import genai
-from config import CURSOS
+from src.config.config import CURSOS
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 

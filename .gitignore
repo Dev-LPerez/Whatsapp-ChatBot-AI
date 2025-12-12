@@ -49,9 +49,10 @@ htmlcov/
 nosetests.xml
 coverage.xml
 *.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
+
+# Archivos de configuración y credenciales
+.env
+firebase_credentials.json
 
 # Translations
 *.mo
@@ -240,4 +241,3 @@ yarn-error.log*
 *.tar.gz
 *.rar
 *.7z
-

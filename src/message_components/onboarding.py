@@ -3,11 +3,11 @@
 
 import time
 import json
-from config import LOGROS_DISPONIBLES
-from utils.formatters import formatear_logro_desbloqueado
-from utils.emojis import *
-from whatsapp_utils import enviar_botones_basicos, responder_mensaje, enviar_menu_interactivo
-import database as db
+from src.config.config import LOGROS_DISPONIBLES
+from src.utils.formatters import formatear_logro_desbloqueado
+from src.utils.emojis import *
+from src.whatsapp_utils import enviar_botones_basicos, responder_mensaje, enviar_menu_interactivo
+import src.database as db
 
 
 def iniciar_onboarding(numero_remitente, nombre_usuario):

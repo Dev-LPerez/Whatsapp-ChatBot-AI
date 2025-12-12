@@ -3,8 +3,8 @@
 import os
 import json
 import requests
-from database import actualizar_usuario
-from config import CURSOS
+from src.database import actualizar_usuario
+from src.config.config import CURSOS
 
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
 ID_NUMERO_TELEFONO = os.getenv("ID_NUMERO_TELEFONO")

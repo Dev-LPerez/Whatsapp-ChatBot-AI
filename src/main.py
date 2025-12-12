@@ -6,11 +6,11 @@ import time
 from fastapi import FastAPI, Request, Response
 from datetime import date, datetime
 
-import database as db
-import message_handler as handler
-from whatsapp_utils import enviar_botones_basicos
+import src.database as db
+import src.message_handler as handler
+from src.whatsapp_utils import enviar_botones_basicos
 # --- ✅ IMPORTACIÓN AGREGADA ---
-from message_components import iniciar_onboarding
+from src.message_components import iniciar_onboarding
 
 app = FastAPI(
     title="LogicBot API",

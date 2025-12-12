@@ -5,11 +5,11 @@ import json
 from datetime import date, datetime
 import firebase_admin
 from firebase_admin import credentials, firestore
-from config import CURSOS
+from src.config.config import CURSOS
 
 # --- CONFIGURACIÓN DE FIREBASE ---
 
-CREDENTIALS_FILE = "firebase_credentials.json"
+CREDENTIALS_FILE = "src/config/firebase_credentials.json"
 
 if not firebase_admin._apps:
     try:

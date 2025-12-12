@@ -2,10 +2,10 @@
 # Sistema de logros y reconocimientos
 
 import json
-import database as db
-from whatsapp_utils import responder_mensaje
-from utils.formatters import formatear_logro_desbloqueado
-from config import LOGROS_DISPONIBLES
+import src.database as db
+from src.whatsapp_utils import responder_mensaje
+from src.utils.formatters import formatear_logro_desbloqueado
+from src.config.config import LOGROS_DISPONIBLES
 
 def verificar_y_otorgar_logros(numero_remitente, usuario):
     """

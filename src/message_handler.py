@@ -4,23 +4,23 @@ import json
 import random
 import time
 from datetime import datetime
-import database as db
-import ai_services as ai
-from config import (
+import src.database as db
+import src.ai_services as ai
+from src.config.config import (
     CURSOS, UMBRAL_DE_FALLOS, PUNTOS_POR_DIFICULTAD,
     PUNTOS_PARA_NIVEL_UP, PUNTOS_HABILIDAD_PARA_NIVEL_UP,
     NOMBRES_NIVELES
 )
-from whatsapp_utils import (
+from src.whatsapp_utils import (
     responder_mensaje, enviar_menu_interactivo, enviar_botones_basicos,
     enviar_menu_temas_java, enviar_lista_recursos
 )
-from utils.formatters import (
+from src.utils.formatters import (
     formatear_puntos_ganados, formatear_nivel_up,
     formatear_progreso_tema, formatear_menu_ayuda, generar_barra_progreso
 )
-from utils.emojis import *
-from message_components import (
+from src.utils.emojis import *
+from src.message_components import (
     handle_onboarding_paso_1, handle_onboarding_paso_2,
     completar_onboarding, finalizar_onboarding_y_empezar,
     verificar_y_otorgar_logros, mostrar_logros_usuario

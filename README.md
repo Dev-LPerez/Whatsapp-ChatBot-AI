@@ -49,12 +49,46 @@
 - **Rachas de Estudio**: Mantén tu motivación con rachas diarias 🔥
 - **Fichas Técnicas**: Biblioteca de recursos desbloqueables
 
-### 💬 Interfaz Interactiva
+---
 
-- **Menús Nativos de WhatsApp**: Listas y botones interactivos
-- **Navegación Intuitiva**: Comandos simples y guiados
-- **Mensajes Personalizados**: Emojis y formato adaptado a WhatsApp
-- **Historial Contextual**: Recuerda tus últimas 6 interacciones
+## 📂 Estructura del Proyecto
+
+El proyecto ha sido reestructurado para una mejor organización y escalabilidad.
+
+```
+.
+├── src
+│   ├── __init__.py
+│   ├── ai_services.py
+│   ├── config
+│   │   ├── config.py
+│   │   ├── firebase_credentials.json
+│   │   └── firebase_credentials.json.example
+│   ├── database.py
+│   ├── frontend
+│   │   └── dashboard_docente.jsx
+│   ├── main.py
+│   ├── message_components
+│   │   ├── __init__.py
+│   │   ├── achievements.py
+│   │   └── onboarding.py
+│   ├── message_handler.py
+│   ├── scripts
+│   │   ├── diagnostico_render.py
+│   │   ├── keep_alive.py
+│   │   └── verificar_config.py
+│   ├── utils
+│   │   ├── __init__.py
+│   │   ├── emojis.py
+│   │   └── formatters.py
+│   └── whatsapp_utils.py
+├── tests
+├── build.sh
+├── COMMIT_COMMANDS.txt
+├── Procfile
+├── README.md
+└── requirements.txt
+```
 
 ---
 
@@ -664,4 +698,3 @@ Si este proyecto te fue útil, considera darle una ⭐ en GitHub. ¡Ayuda a otro
 [⬆ Volver arriba](#-logicbot---chatbot-educativo-de-programación)
 
 </div>
-
