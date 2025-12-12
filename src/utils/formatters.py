@@ -1,7 +1,7 @@
 # utils/formatters.py
 # Funciones para formatear mensajes de WhatsApp de forma atractiva
 
-from utils.emojis import *
+from src.utils.emojis import *
 
 def generar_barra_progreso(actual, total, longitud=10):
     """
