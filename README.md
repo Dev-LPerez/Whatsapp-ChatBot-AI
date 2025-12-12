@@ -279,10 +279,24 @@ El proyecto incluye configuración automática para Render:
    ```
    web: gunicorn -w 4 -k uvicorn.workers.UvicornWorker src.main:app
    ```
+   ⚠️ **Importante**: El comando debe ser `src.main:app` (no `main:app`)
+   
 2. **Script `build.sh`**: Instalación de dependencias
-3. **Variables de Entorno**: Configuradas en Render Dashboard
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-**Despliegue automático** al hacer push a la rama `main`
+3. **Variables de Entorno**: Configuradas en Render Dashboard
+   - `WHATSAPP_TOKEN`
+   - `VERIFY_TOKEN`
+   - `ID_NUMERO_TELEFONO`
+   - `GEMINI_API_KEY`
+
+4. **Despliegue**:
+   - Automático al hacer push a la rama `main`
+   - Si hay errores de cache, usa: **Settings → Clear build cache & deploy**
+
+**URL del servicio**: `https://tu-app.onrender.com`
 
 ### Configurar Webhook de WhatsApp
 
@@ -540,6 +554,53 @@ python -m src.scripts.diagnostico_render
   "uptime": "2h 34m"
 }
 ```
+
+---
+
+## 🔧 Troubleshooting
+
+> 📖 **Guía Completa**: Para más detalles sobre problemas de despliegue, consulta [RENDER_TROUBLESHOOTING.md](RENDER_TROUBLESHOOTING.md)
+
+### Error: "ModuleNotFoundError: No module named 'main'" en Render
+
+**Problema**: Render está ejecutando `main:app` en lugar de `src.main:app`
+
+**Solución**:
+1. Verifica que tu `Procfile` tenga:
+   ```
+   web: gunicorn -w 4 -k uvicorn.workers.UvicornWorker src.main:app
+   ```
+2. En el Dashboard de Render:
+   - Ve a tu servicio
+   - Settings → Build & Deploy
+   - Haz clic en **"Clear build cache & deploy"**
+3. Haz un commit y push para forzar un nuevo deploy:
+   ```bash
+   git commit --allow-empty -m "chore: trigger rebuild"
+   git push origin main
+   ```
+
+### Error: Firebase Admin SDK no inicializa
+
+**Solución**:
+- Asegúrate de tener `firebase_credentials.json` en `src/config/`
+- O configura las credenciales por defecto en Render/Google Cloud
+- Verifica que el archivo no esté en `.gitignore` si lo necesitas en producción
+
+### Error: Variables de entorno no cargadas
+
+**Solución**:
+1. Verifica que el archivo `.env` existe (local)
+2. En Render: Settings → Environment → Add Environment Variable
+3. Reinicia el servicio después de agregar variables
+
+### El bot no responde en WhatsApp
+
+**Solución**:
+1. Verifica que el webhook esté configurado correctamente
+2. Revisa los logs en Render Dashboard
+3. Confirma que `VERIFY_TOKEN` sea el mismo en `.env` y Meta Dashboard
+4. Verifica que el número de WhatsApp esté activo
 
 ---
 
