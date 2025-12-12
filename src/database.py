@@ -9,7 +9,7 @@ from src.config.config import CURSOS
 
 # --- CONFIGURACIÓN DE FIREBASE ---
 
-CREDENTIALS_FILE = "src/config/firebase_credentials.json"
+CREDENTIALS_FILE = "firebase_credentials.json"
 
 if not firebase_admin._apps:
     try:
