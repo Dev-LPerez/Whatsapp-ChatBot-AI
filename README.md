@@ -57,37 +57,44 @@ El proyecto ha sido reestructurado para una mejor organización y escalabilidad.
 
 ```
 .
-├── src
+├── src/
 │   ├── __init__.py
-│   ├── ai_services.py
-│   ├── config
-│   │   ├── config.py
-│   │   ├── firebase_credentials.json
+│   ├── main.py                   # Punto de entrada (FastAPI)
+│   ├── ai_services.py            # Integración con Gemini AI
+│   ├── database.py               # Lógica de Firebase
+│   ├── message_handler.py        # Enrutamiento de mensajes
+│   ├── whatsapp_utils.py         # Funciones de WhatsApp API
+│   │
+│   ├── config/
+│   │   ├── config.py             # Configuración global
 │   │   └── firebase_credentials.json.example
-│   ├── database.py
-│   ├── frontend
-│   │   └── dashboard_docente.jsx
-│   ├── main.py
-│   ├── message_components
+│   │
+│   ├── message_components/       # Componentes modulares
 │   │   ├── __init__.py
-│   │   ├── achievements.py
-│   │   └── onboarding.py
-│   ├── message_handler.py
-│   ├── scripts
-│   │   ├── diagnostico_render.py
-│   │   ├── keep_alive.py
-│   │   └── verificar_config.py
-│   ├── utils
-│   │   ├── __init__.py
-│   │   ├── emojis.py
-│   │   └── formatters.py
-│   └── whatsapp_utils.py
-├── tests
-├── build.sh
-├── COMMIT_COMMANDS.txt
-├── Procfile
-├── README.md
-└── requirements.txt
+│   │   ├── achievements.py       # Sistema de logros
+│   │   └── onboarding.py         # Flujo de bienvenida
+│   │
+│   ├── scripts/                  # Scripts de utilidad
+│   │   ├── diagnostico_render.py # Diagnóstico para Render
+│   │   ├── keep_alive.py         # Health check para Render
+│   │   └── verificar_config.py   # Verificar configuración
+│   │
+│   └── utils/                    # Utilidades
+│       ├── __init__.py
+│       ├── emojis.py             # Constantes de emojis
+│       └── formatters.py         # Formateadores de texto
+│
+├── tests/                        # Tests (en desarrollo)
+├── __pycache__/
+├── .venv/                        # Entorno virtual (local)
+├── .git/
+├── .gitignore
+├── .env.example                  # Plantilla de variables de entorno
+├── build.sh                      # Script de build para Render
+├── Procfile                      # Config para Render
+├── README.md                     # Este archivo
+├── requirements.txt              # Dependencias Python
+└── firebase_credentials.json     # Credenciales Firebase (no subir a Git)
 ```
 
 ---
@@ -122,7 +129,7 @@ LogicBot: 💡 RETO - Dificultad: Intermedio (20 pts)
 
 ### Capturas de Pantalla
 
-> **Nota**: Para ver ejemplos visuales, consulta la carpeta `/docs`
+> **Nota**: El bot funciona directamente desde WhatsApp con interfaz de botones interactivos
 
 ---
 
@@ -187,22 +194,19 @@ pip install -r requirements.txt
 
 ### 4️⃣ Configurar Variables de Entorno
 
-Crea un archivo `.env` en la raíz del proyecto:
+Crea un archivo `.env` en la raíz del proyecto (puedes copiar `.env.example`):
 
 ```env
 # WhatsApp Business API
-WHATSAPP_TOKEN=tu_token_de_whatsapp
-VERIFY_TOKEN=tu_token_de_verificacion
-WHATSAPP_PHONE_NUMBER_ID=tu_phone_number_id
+WHATSAPP_TOKEN=EAAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+VERIFY_TOKEN=micodigosecreto_12345
+ID_NUMERO_TELEFONO=123456789012345
 
 # Google Gemini AI
-GEMINI_API_KEY=tu_api_key_de_gemini
+GEMINI_API_KEY=AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-# Firebase (opcional si usas archivo JSON)
-# GOOGLE_APPLICATION_CREDENTIALS=firebase_credentials.json
-
-# Configuración del Servidor
-PORT=8000
+# Base de Datos (si no usas Firebase)
+# DATABASE_URL=postgresql://usuario:password@host:5432/nombre_bd
 ```
 
 ### 5️⃣ Configurar Firebase
@@ -216,24 +220,30 @@ Descarga tu archivo de credenciales desde la consola de Firebase:
 2. Selecciona tu proyecto
 3. Ve a **Configuración del Proyecto** > **Cuentas de Servicio**
 4. Clic en **Generar nueva clave privada**
-5. Guarda el archivo como `firebase_credentials.json` en la raíz del proyecto
+5. Guarda el archivo como `firebase_credentials.json` en `src/config/firebase_credentials.json`
 
 **⚠️ IMPORTANTE: Este archivo contiene credenciales sensibles**
 - **NUNCA** lo subas a Git (ya está en `.gitignore`)
-- Usa `firebase_credentials.json.example` como referencia
-- En producción, usa variables de entorno
+- Usa `src/config/firebase_credentials.json.example` como referencia
+- En producción, usa las credenciales por defecto de Render/Google Cloud
 
-**Opción 2: Usando variables de entorno (Recomendado para producción)**
+**Opción 2: Usando credenciales por defecto (Recomendado para producción)**
 
-```env
-GOOGLE_APPLICATION_CREDENTIALS=firebase_credentials.json
-# O configura las credenciales directamente como variables de entorno
+El bot automáticamente intentará usar las credenciales por defecto si no encuentra el archivo local, ideal para despliegue en Render con Google Cloud.
+
+```python
+# El código en database.py maneja ambos casos automáticamente
+if os.path.exists("src/config/firebase_credentials.json"):
+    cred = credentials.Certificate("src/config/firebase_credentials.json")
+else:
+    # Usa credenciales por defecto en producción
+    firebase_admin.initialize_app()
 ```
 
 ### 6️⃣ Verificar Configuración
 
 ```powershell
-python verificar_config.py
+python -m src.scripts.verificar_config
 ```
 
 Deberías ver:
@@ -250,7 +260,13 @@ Deberías ver:
 ### Modo Desarrollo (Local)
 
 ```powershell
-uvicorn main:app --reload --port 8000
+uvicorn src.main:app --reload --port 8000
+```
+
+O alternativamente:
+
+```powershell
+python -m uvicorn src.main:app --reload --port 8000
 ```
 
 El servidor estará disponible en `http://localhost:8000`
@@ -259,7 +275,10 @@ El servidor estará disponible en `http://localhost:8000`
 
 El proyecto incluye configuración automática para Render:
 
-1. **Archivo `Procfile`**: Define el comando de inicio
+1. **Archivo `Procfile`**: Define el comando de inicio con Gunicorn
+   ```
+   web: gunicorn -w 4 -k uvicorn.workers.UvicornWorker src.main:app
+   ```
 2. **Script `build.sh`**: Instalación de dependencias
 3. **Variables de Entorno**: Configuradas en Render Dashboard
 
@@ -303,33 +322,44 @@ El bot usa **menús interactivos** de WhatsApp:
 
 ```
 Whatsapp-ChatBot-AI/
-├── main.py                    # Punto de entrada (FastAPI)
-├── config.py                  # Configuración global
-├── database.py                # Lógica de Firebase
-├── ai_services.py             # Integración con Gemini AI
-├── message_handler.py         # Enrutamiento de mensajes
-├── whatsapp_utils.py          # Funciones de WhatsApp API
-├── keep_alive.py              # Health check para Render
-├── verificar_config.py        # Script de diagnóstico
-├── requirements.txt           # Dependencias Python
-├── Procfile                   # Config para Render
-├── build.sh                   # Script de build
-├── firebase_credentials.json  # Credenciales Firebase (no subir a Git)
 │
-├── message_components/        # Componentes modulares
+├── src/                       # Código fuente principal
 │   ├── __init__.py
-│   ├── onboarding.py         # Flujo de bienvenida
-│   └── achievements.py       # Sistema de logros
+│   ├── main.py               # Punto de entrada (FastAPI)
+│   ├── database.py           # Lógica de Firebase
+│   ├── ai_services.py        # Integración con Gemini AI
+│   ├── message_handler.py    # Enrutamiento de mensajes
+│   ├── whatsapp_utils.py     # Funciones de WhatsApp API
+│   │
+│   ├── config/               # Configuraciones
+│   │   ├── config.py         # Configuración global
+│   │   └── firebase_credentials.json.example
+│   │
+│   ├── message_components/   # Componentes modulares
+│   │   ├── __init__.py
+│   │   ├── onboarding.py     # Flujo de bienvenida
+│   │   └── achievements.py   # Sistema de logros
+│   │
+│   ├── scripts/              # Scripts de utilidad
+│   │   ├── verificar_config.py    # Script de diagnóstico
+│   │   ├── diagnostico_render.py  # Diagnóstico para Render
+│   │   └── keep_alive.py          # Health check para Render
+│   │
+│   └── utils/                # Utilidades
+│       ├── __init__.py
+│       ├── emojis.py         # Constantes de emojis
+│       └── formatters.py     # Formateadores de texto
 │
-└── utils/                     # Utilidades
-    ├── __init__.py
-    ├── emojis.py             # Constantes de emojis
-    └── formatters.py         # Formateadores de texto
-```
-    ├── REQUERIMIENTOS.md     # Especificación funcional
-    ├── RENDER_DEPLOY.md      # Guía de despliegue
-    ├── MEJORAS_UX_IMPLEMENTADAS.md
-    └── CASOS_DE_USO.puml     # Diagramas UML
+├── tests/                    # Tests (en desarrollo)
+├── .venv/                    # Entorno virtual (local)
+├── __pycache__/              # Cache de Python
+├── .gitignore
+├── .env.example              # Plantilla de variables de entorno
+├── build.sh                  # Script de build para Render
+├── Procfile                  # Config para Render (Gunicorn)
+├── requirements.txt          # Dependencias Python
+├── firebase_credentials.json # Credenciales Firebase (no subir a Git)
+└── README.md                 # Este archivo
 ```
 
 ### Flujo de Datos
@@ -357,17 +387,22 @@ WhatsApp User
 
 ### Personalizar Cursos
 
-Edita `config.py` para agregar nuevos temas:
+Edita `src/config/config.py` para agregar nuevos temas:
 
 ```python
 CURSOS = {
-    "Java": {
-        "temas": [
-            {"id": "1", "nombre": "Variables y Tipos de Datos"},
-            {"id": "2", "nombre": "Operadores"},
-            # Agrega más temas...
+    "java": {
+        "nombre": "Java Fundamentals ☕",
+        "lecciones": [
+            "Variables y Primitivos", 
+            "Operadores Lógicos", 
+            "Condicionales (if-else)", 
+            "Ciclos (for, while)", 
+            "Arrays (Arreglos)",
+            "Métodos y Funciones",
+            "Clases y Objetos (OOP)"
         ]
-    },
+    }
     # Agrega más lenguajes...
 }
 ```
@@ -375,7 +410,7 @@ CURSOS = {
 ### Ajustar Gamificación
 
 ```python
-# config.py
+# src/config/config.py
 PUNTOS_POR_DIFICULTAD = {
     "Fácil": 10,
     "Intermedio": 20,
@@ -388,7 +423,7 @@ PUNTOS_PARA_NIVEL_UP = 100
 ### Crear Nuevos Logros
 
 ```python
-# config.py - LOGROS_DISPONIBLES
+# src/config/config.py - LOGROS_DISPONIBLES
 "nuevo_logro": {
     "nombre": "Nombre del Logro",
     "descripcion": "Descripción",
@@ -450,13 +485,13 @@ PUNTOS_PARA_NIVEL_UP = 100
 ### Verificar Configuración
 
 ```powershell
-python verificar_config.py
+python -m src.scripts.verificar_config
 ```
 
 ### Test de Diagnóstico (Render)
 
 ```powershell
-python diagnostico_render.py
+python -m src.scripts.diagnostico_render
 ```
 
 ### Pruebas Manuales
@@ -466,17 +501,7 @@ python diagnostico_render.py
 
 ---
 
-## 📚 Documentación
-
-### Guías Disponibles
-
-- **[GUIA_INICIO.md](docs/GUIA_INICIO.md)** - Configuración paso a paso
-- **[REQUERIMIENTOS.md](docs/REQUERIMIENTOS.md)** - Especificación funcional completa
-- **[RENDER_DEPLOY.md](docs/RENDER_DEPLOY.md)** - Despliegue en producción
-- **[MEJORAS_UX_IMPLEMENTADAS.md](docs/MEJORAS_UX_IMPLEMENTADAS.md)** - Changelog de UX
-- **[CASOS_DE_USO.puml](docs/CASOS_DE_USO.puml)** - Diagramas UML
-
-### API Reference
+## 📚 API Reference
 
 #### POST /webhook
 

@@ -52,11 +52,11 @@ def verificar_importaciones():
     print("\n📦 Librerías:")
     libs = {
         "fastapi": "FastAPI",
-        "sqlalchemy": "SQLAlchemy",
-        "psycopg2": "PostgreSQL Driver",
+        "firebase_admin": "Firebase Admin SDK",
         "requests": "Requests",
-        "google.genai": "Google Gemini AI",
-        "uvicorn": "Uvicorn"
+        "google.generativeai": "Google Gemini AI",
+        "uvicorn": "Uvicorn",
+        "gunicorn": "Gunicorn"
     }
 
     todas_ok = True
@@ -81,19 +81,26 @@ def main():
 
     # Verificar archivos
     print("\n📁 Archivos del Proyecto:")
-    archivos = [
-        ("main.py", "main.py"),
-        ("database.py", "database.py"),
-        ("message_handler.py", "message_handler.py"),
-        ("ai_services.py", "ai_services.py"),
-        ("whatsapp_utils.py", "whatsapp_utils.py"),
-        ("config.py", "config.py"),
+    archivos_obligatorios = [
+        ("src/main.py", "src/main.py"),
+        ("src/database.py", "src/database.py"),
+        ("src/message_handler.py", "src/message_handler.py"),
+        ("src/ai_services.py", "src/ai_services.py"),
+        ("src/whatsapp_utils.py", "src/whatsapp_utils.py"),
+        ("src/config/config.py", "src/config/config.py"),
         ("requirements.txt", "requirements.txt"),
-        (".env", ".env (Variables de Entorno)"),
         ("Procfile", "Procfile (Deployment)")
     ]
 
-    archivos_ok = all(verificar_archivo(ruta, nombre) for ruta, nombre in archivos)
+    archivos_opcionales = [
+        (".env", ".env (Variables de Entorno - Opcional)")
+    ]
+
+    archivos_ok = all(verificar_archivo(ruta, nombre) for ruta, nombre in archivos_obligatorios)
+
+    # Verificar opcionales sin afectar el resultado
+    for ruta, nombre in archivos_opcionales:
+        verificar_archivo(ruta, nombre)
 
     # Verificar variables de entorno
     env_ok, faltantes = verificar_env()
